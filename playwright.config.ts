@@ -18,6 +18,7 @@ export default defineConfig({
     reuseExistingServer: !process.env.CI,
     timeout: 180_000,
     env: {
+      E2E: "true",
       VITE_SUPABASE_URL: "https://example.supabase.co",
       VITE_SUPABASE_PUBLISHABLE_KEY: "test-anon-key",
     },
