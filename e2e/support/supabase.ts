@@ -36,3 +36,40 @@ export async function stubAuth(page: Page, opts: { staff: boolean }) {
   await page.route("**/rest/v1/**", (r) => json(r, []));
   await page.route("**/rest/v1/rpc/is_platform_admin**", (r) => json(r, opts.staff));
 }
+
+// One business with an owner and an active subscription, used to drive the Customers
+// screens. Register AFTER stubAuth so these win over the catch-all (last match wins).
+export const CUSTOMER = {
+  id: "aaaaaaaa-0000-0000-0000-000000000001",
+  name: "Mama Put Foods",
+  currency: "NGN",
+  subscription_tier: "pro",
+  owner_id: "bbbbbbbb-0000-0000-0000-000000000002",
+  created_at: "2026-01-15T10:00:00Z",
+  timezone: "Africa/Lagos",
+  whatsapp_number: "+2348100000000",
+};
+
+const OWNER = { id: CUSTOMER.owner_id, owner_name: "Ada Obi", phone: "+2348100000000", last_seen: null };
+
+export async function stubCustomers(page: Page) {
+  await page.route("**/rest/v1/businesses**", (r) => {
+    // Detail uses .maybeSingle() (id=eq.<id>) → return a single object; the list returns an array.
+    const single = r.request().url().includes("id=eq.");
+    return json(r, single ? CUSTOMER : [CUSTOMER]);
+  });
+  await page.route("**/rest/v1/profiles**", (r) => json(r, [OWNER]));
+  await page.route("**/rest/v1/subscriptions**", (r) => {
+    const single = r.request().url().includes("business_id=eq.");
+    const detail = {
+      plan_key: "pro",
+      cycle: "month",
+      status: "active",
+      amount: 5000,
+      currency: "NGN",
+      current_period_end: null,
+      started_at: CUSTOMER.created_at,
+    };
+    return json(r, single ? detail : [{ business_id: CUSTOMER.id, status: "active", amount: 5000 }]);
+  });
+}
