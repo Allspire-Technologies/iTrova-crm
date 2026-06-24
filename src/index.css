@@ -1,0 +1,95 @@
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@500;600;700;800&family=DM+Sans:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Design tokens copied verbatim from iTrova so Admin OS is visually part of iTrova.
+   Brand: Trusted Green. All colors are HSL. */
+
+@layer base {
+  :root {
+    --background: 150 40% 98%;
+    --foreground: 165 80% 9%;
+
+    --brand: 158 70% 37%;
+    --brand-foreground: 0 0% 100%;
+    --brand-dark: 168 79% 15%;
+    --brand-light: 158 60% 92%;
+    --brand-glow: 158 70% 50%;
+
+    --warning: 31 78% 41%;
+    --warning-foreground: 0 0% 100%;
+    --danger: 0 58% 41%;
+    --danger-foreground: 0 0% 100%;
+    --success: 158 70% 37%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 165 80% 9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 165 80% 9%;
+    --primary: 168 79% 15%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 158 40% 95%;
+    --secondary-foreground: 168 79% 15%;
+    --muted: 150 25% 95%;
+    --muted-foreground: 165 15% 40%;
+    --accent: 158 60% 92%;
+    --accent-foreground: 168 79% 15%;
+    --destructive: 0 58% 41%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 158 30% 88%;
+    --input: 158 30% 88%;
+    --ring: 158 70% 37%;
+    --radius: 0.75rem;
+
+    --gradient-brand: linear-gradient(135deg, hsl(168 79% 15%), hsl(158 70% 37%));
+    --gradient-soft: linear-gradient(180deg, hsl(158 60% 96%), hsl(0 0% 100%));
+    --gradient-hero: radial-gradient(ellipse at top left, hsl(158 70% 37% / 0.15), transparent 60%),
+                     radial-gradient(ellipse at bottom right, hsl(168 79% 15% / 0.08), transparent 60%);
+
+    --shadow-card: 0 1px 2px hsl(168 79% 15% / 0.04), 0 4px 12px hsl(168 79% 15% / 0.04);
+    --shadow-elevated: 0 8px 32px -8px hsl(168 79% 15% / 0.18);
+    --shadow-brand: 0 8px 24px -8px hsl(158 70% 37% / 0.45);
+
+    --sidebar-background: 168 79% 12%;
+    --sidebar-foreground: 158 40% 92%;
+    --sidebar-primary: 158 70% 50%;
+    --sidebar-primary-foreground: 168 79% 10%;
+    --sidebar-accent: 168 60% 18%;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 168 50% 20%;
+    --sidebar-ring: 158 70% 50%;
+  }
+
+  .dark {
+    --background: 168 79% 8%;
+    --foreground: 158 40% 95%;
+    --card: 168 60% 11%;
+    --card-foreground: 158 40% 95%;
+    --popover: 168 60% 11%;
+    --popover-foreground: 158 40% 95%;
+    --primary: 158 70% 50%;
+    --primary-foreground: 168 79% 10%;
+    --secondary: 168 50% 15%;
+    --secondary-foreground: 158 40% 95%;
+    --muted: 168 50% 15%;
+    --muted-foreground: 158 20% 65%;
+    --accent: 168 50% 18%;
+    --accent-foreground: 158 40% 95%;
+    --destructive: 0 58% 45%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 168 50% 18%;
+    --input: 168 50% 18%;
+    --ring: 158 70% 50%;
+  }
+}
+
+@layer base {
+  * { @apply border-border; }
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-feature-settings: "cv11", "ss01";
+  }
+  h1, h2, h3, h4, h5 { @apply font-display; }
+}
