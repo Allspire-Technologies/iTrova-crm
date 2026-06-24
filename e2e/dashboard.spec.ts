@@ -5,11 +5,11 @@ import { stubCustomers, CUSTOMER } from "./support/supabase";
 test.describe("Dashboard", () => {
   test("staff sees KPIs and recent signups from real reads", async ({ page }) => {
     await signIn(page, { staff: true });
-    await expect(page).toHaveURL(/\/admin\/?$/);
+    await expect(page).toHaveURL(/\/\/localhost:8090\/$/);
 
     // Stub the cross-tenant reads, then reload so the dashboard recomputes from them.
     await stubCustomers(page);
-    await page.goto("/admin/");
+    await page.goto("/");
 
     await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible();
     await expect(page.getByText("Total businesses")).toBeVisible();

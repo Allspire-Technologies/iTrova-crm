@@ -11,8 +11,7 @@ const plugins: PluginOption[] = [react()];
 if (process.env.E2E !== "true") plugins.push(cloudflare());
 
 export default defineConfig({
-  // Served under /admin on the same subdomain as iTrova (e.g. app.itrova.com/admin).
-  base: "/admin/",
+  // Served at the root of its own subdomain (itrova-crm.allspire.tech).
   server: { host: "::", port: 8090 },
   plugins,
   resolve: {

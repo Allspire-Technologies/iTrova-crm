@@ -14,7 +14,7 @@ import NotFound from "@/pages/NotFound";
 
 export default function App() {
   return (
-    <BrowserRouter basename="/admin">
+    <BrowserRouter>
       <AuthProvider>
         <Routes>
           {/* Public / pre-gate */}
