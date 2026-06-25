@@ -115,3 +115,25 @@ export async function refreshAggregates(): Promise<void> {
   const { error } = await supabase.rpc("admin_refresh_aggregates");
   if (error) throw error;
 }
+
+// Internal staff member (candidate account manager). From admin_list_staff().
+export type StaffMember = { id: string; name: string };
+
+// Filter facets for the customers overview (distinct plans/industries + the staff list),
+// fetched once and reused for every dropdown. From admin_customers_facets().
+export type CustomersFacets = {
+  plans: string[];
+  industries: string[];
+  managers: StaffMember[];
+};
+
+export async function getCustomersFacets(): Promise<CustomersFacets> {
+  const { data, error } = await supabase.rpc("admin_customers_facets");
+  if (error) throw error;
+  const r = (data ?? {}) as { plans?: unknown; industries?: unknown; managers?: unknown };
+  const asStrings = (v: unknown): string[] => (Array.isArray(v) ? v.map(String) : []);
+  const managers = Array.isArray(r.managers)
+    ? (r.managers as Row[]).map((m) => ({ id: String(m.id), name: str(m.name) ?? String(m.id) }))
+    : [];
+  return { plans: asStrings(r.plans), industries: asStrings(r.industries), managers };
+}
