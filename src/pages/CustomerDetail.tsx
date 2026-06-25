@@ -1,6 +1,17 @@
 import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import { ArrowLeft, Building2, Users } from "lucide-react";
+import {
+  ArrowLeft,
+  AlertTriangle,
+  ArrowLeftRight,
+  Building2,
+  Clock,
+  Package,
+  Receipt,
+  ShoppingCart,
+  Truck,
+  Users,
+} from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/states/EmptyState";
 import { LoadingState } from "@/components/states/LoadingState";
@@ -10,6 +21,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { SubscriptionBadge, PlanBadge } from "@/components/SubscriptionBadge";
+import { StatCard } from "@/components/StatCard";
 import { getCustomer, type CustomerDetail as Detail } from "@/lib/customers";
 import { formatDate, formatMoney, formatRelative } from "@/lib/format";
 
@@ -118,6 +130,17 @@ export default function CustomerDetail() {
             </dl>
           </CardContent>
         </Card>
+      </div>
+
+      <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard label="Products" value={String(data.metrics.productsTotal)} hint={`${data.metrics.productsAdded30d} added · 30d`} icon={Package} />
+        <StatCard label="Low stock" value={String(data.metrics.productsLowStock)} icon={AlertTriangle} />
+        <StatCard label="Sales" value={String(data.metrics.salesCount)} hint={formatMoney(data.metrics.revenueRecorded, data.currency)} icon={Receipt} />
+        <StatCard label="Purchase orders" value={String(data.metrics.purchaseOrders)} icon={Truck} />
+        <StatCard label="Stock movements" value={String(data.metrics.stockMovements)} icon={ArrowLeftRight} />
+        <StatCard label="Online orders" value={String(data.metrics.ordersCount)} icon={ShoppingCart} />
+        <StatCard label="Active users" value={`${data.metrics.activeUsers}/${data.metrics.totalUsers}`} hint="last 30 days" icon={Users} />
+        <StatCard label="Last login" value={formatRelative(data.metrics.lastLogin)} icon={Clock} />
       </div>
 
       <Card className="mt-6">

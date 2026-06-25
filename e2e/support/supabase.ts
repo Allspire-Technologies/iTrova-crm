@@ -52,24 +52,50 @@ export const CUSTOMER = {
 
 const OWNER = { id: CUSTOMER.owner_id, owner_name: "Ada Obi", phone: "+2348100000000", last_seen: null };
 
+// One row of the admin_business_aggregates RPC (snake_case, as PostgREST returns it).
+const AGG = {
+  business_id: CUSTOMER.id,
+  name: CUSTOMER.name,
+  currency: "NGN",
+  timezone: CUSTOMER.timezone,
+  whatsapp_number: CUSTOMER.whatsapp_number,
+  owner_id: CUSTOMER.owner_id,
+  owner_name: OWNER.owner_name,
+  plan_key: "pro",
+  subscription_status: "active",
+  subscription_amount: 5000,
+  subscription_cycle: "month",
+  subscription_started: CUSTOMER.created_at,
+  renewal_date: null,
+  joined_at: CUSTOMER.created_at,
+  total_users: 1,
+  active_users: 1,
+  last_login: null,
+  products_total: 12,
+  products_added_30d: 3,
+  products_low_stock: 2,
+  stock_movements: 5,
+  purchase_orders: 4,
+  sales_count: 20,
+  revenue_recorded: 150000,
+  orders_count: 6,
+};
+
+const KPI = {
+  total_businesses: 1,
+  active_subscriptions: 1,
+  new_this_month: 0,
+  mrr: 5000,
+  currency: "NGN",
+  total_revenue: 150000,
+  total_sales: 20,
+  total_products: 12,
+};
+
 export async function stubCustomers(page: Page) {
-  await page.route("**/rest/v1/businesses**", (r) => {
-    // Detail uses .maybeSingle() (id=eq.<id>) → return a single object; the list returns an array.
-    const single = r.request().url().includes("id=eq.");
-    return json(r, single ? CUSTOMER : [CUSTOMER]);
-  });
+  // Both the table (no arg) and the detail (p_business_id) hit the same RPC.
+  await page.route("**/rest/v1/rpc/admin_business_aggregates**", (r) => json(r, [AGG]));
+  await page.route("**/rest/v1/rpc/admin_dashboard_kpis**", (r) => json(r, [KPI]));
+  // The detail page still reads the team from profiles (admin-read RLS).
   await page.route("**/rest/v1/profiles**", (r) => json(r, [OWNER]));
-  await page.route("**/rest/v1/subscriptions**", (r) => {
-    const single = r.request().url().includes("business_id=eq.");
-    const detail = {
-      plan_key: "pro",
-      cycle: "month",
-      status: "active",
-      amount: 5000,
-      currency: "NGN",
-      current_period_end: null,
-      started_at: CUSTOMER.created_at,
-    };
-    return json(r, single ? detail : [{ business_id: CUSTOMER.id, status: "active", amount: 5000 }]);
-  });
 }
