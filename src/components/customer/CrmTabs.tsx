@@ -1,0 +1,449 @@
+import { useEffect, useState, type ReactNode } from "react";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
+import { formatDate, formatRelative } from "@/lib/format";
+import {
+  notes,
+  tickets,
+  featureRequests,
+  feedback,
+  tasks,
+  type CsNote,
+  type CsTicket,
+  type CsFeatureRequest,
+  type CsFeedback,
+  type CsTask,
+  type NoteType,
+  type TicketPriority,
+  type TicketStatus,
+  type FeatureRequestStatus,
+  type TaskStatus,
+  type TaskType,
+} from "@/lib/cs";
+
+const selectClass =
+  "h-9 rounded-md border border-input bg-background px-2 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+const textareaClass =
+  "min-h-[72px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+
+function msg(e: unknown) {
+  return (e as { message?: string })?.message ?? "Something went wrong.";
+}
+
+function Row({ children }: { children: ReactNode }) {
+  return <li className="rounded-lg border border-border/60 bg-card px-4 py-3">{children}</li>;
+}
+
+function Empty({ label }: { label: string }) {
+  return <li className="rounded-lg border border-dashed border-border bg-card/50 px-4 py-6 text-center text-sm text-muted-foreground">{label}</li>;
+}
+
+// --------------------------------------------------------------------------- Notes
+function NotesTab({ businessId }: { businessId: string }) {
+  const [list, setList] = useState<CsNote[] | null>(null);
+  const [type, setType] = useState<NoteType>("general");
+  const [body, setBody] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [editing, setEditing] = useState<string | null>(null);
+  const [editBody, setEditBody] = useState("");
+
+  useEffect(() => {
+    notes.list({ businessId }).then(setList).catch((e) => toast.error(msg(e)));
+  }, [businessId]);
+
+  async function add() {
+    if (!body.trim()) return;
+    setSaving(true);
+    try {
+      const created = await notes.create({ business_id: businessId, type, body: body.trim() });
+      setList((l) => [created, ...(l ?? [])]);
+      setBody("");
+    } catch (e) {
+      toast.error(msg(e));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function saveEdit(id: string) {
+    try {
+      const updated = await notes.update(id, { body: editBody.trim() });
+      setList((l) => (l ?? []).map((n) => (n.id === id ? updated : n)));
+      setEditing(null);
+    } catch (e) {
+      toast.error(msg(e));
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="space-y-2 rounded-lg border border-border/60 bg-secondary/30 p-3">
+        <div className="flex items-center gap-2">
+          <select className={selectClass} value={type} onChange={(e) => setType(e.target.value as NoteType)} aria-label="Note type">
+            <option value="general">General</option>
+            <option value="meeting">Meeting</option>
+            <option value="call">Call</option>
+          </select>
+          <span className="text-xs text-muted-foreground">New note</span>
+        </div>
+        <textarea className={textareaClass} value={body} onChange={(e) => setBody(e.target.value)} placeholder="Write a note…" aria-label="Note body" />
+        <Button size="sm" onClick={add} disabled={saving || !body.trim()}>Add note</Button>
+      </div>
+
+      <ul className="space-y-2">
+        {list == null && <Empty label="Loading…" />}
+        {list?.length === 0 && <Empty label="No notes yet." />}
+        {list?.map((n) => (
+          <Row key={n.id}>
+            <div className="flex items-center justify-between gap-2">
+              <Badge variant="secondary" className="capitalize">{n.type}</Badge>
+              <span className="text-xs text-muted-foreground">{formatRelative(n.created_at)}</span>
+            </div>
+            {editing === n.id ? (
+              <div className="mt-2 space-y-2">
+                <textarea className={textareaClass} value={editBody} onChange={(e) => setEditBody(e.target.value)} aria-label="Edit note" />
+                <div className="flex gap-2">
+                  <Button size="sm" onClick={() => saveEdit(n.id)} disabled={!editBody.trim()}>Save</Button>
+                  <Button size="sm" variant="ghost" onClick={() => setEditing(null)}>Cancel</Button>
+                </div>
+              </div>
+            ) : (
+              <div className="mt-1.5 flex items-start justify-between gap-3">
+                <p className="whitespace-pre-wrap text-sm text-foreground">{n.body}</p>
+                <Button size="sm" variant="ghost" onClick={() => { setEditing(n.id); setEditBody(n.body); }}>Edit</Button>
+              </div>
+            )}
+          </Row>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+// --------------------------------------------------------------------------- Tickets
+function TicketsTab({ businessId }: { businessId: string }) {
+  const [list, setList] = useState<CsTicket[] | null>(null);
+  const [title, setTitle] = useState("");
+  const [priority, setPriority] = useState<TicketPriority>("med");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    tickets.list({ businessId }).then(setList).catch((e) => toast.error(msg(e)));
+  }, [businessId]);
+
+  async function add() {
+    if (!title.trim()) return;
+    setSaving(true);
+    try {
+      const created = await tickets.create({ business_id: businessId, title: title.trim(), priority });
+      setList((l) => [created, ...(l ?? [])]);
+      setTitle("");
+    } catch (e) {
+      toast.error(msg(e));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function patch(id: string, patch: Parameters<typeof tickets.update>[1]) {
+    try {
+      const updated = await tickets.update(id, patch);
+      setList((l) => (l ?? []).map((t) => (t.id === id ? updated : t)));
+    } catch (e) {
+      toast.error(msg(e));
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border/60 bg-secondary/30 p-3">
+        <Input className="min-w-[200px] flex-1" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="New ticket title…" aria-label="Ticket title" />
+        <select className={selectClass} value={priority} onChange={(e) => setPriority(e.target.value as TicketPriority)} aria-label="Ticket priority">
+          <option value="low">Low</option>
+          <option value="med">Medium</option>
+          <option value="high">High</option>
+          <option value="urgent">Urgent</option>
+        </select>
+        <Button size="sm" onClick={add} disabled={saving || !title.trim()}>Add ticket</Button>
+      </div>
+
+      <ul className="space-y-2">
+        {list == null && <Empty label="Loading…" />}
+        {list?.length === 0 && <Empty label="No tickets yet." />}
+        {list?.map((t) => (
+          <Row key={t.id}>
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="min-w-[10rem] flex-1 font-medium text-brand-dark">{t.title}</span>
+              <select
+                className={selectClass}
+                value={t.priority}
+                onChange={(e) => patch(t.id, { priority: e.target.value as TicketPriority })}
+                aria-label={`Priority for ${t.title}`}
+              >
+                <option value="low">Low</option>
+                <option value="med">Medium</option>
+                <option value="high">High</option>
+                <option value="urgent">Urgent</option>
+              </select>
+              <select
+                className={selectClass}
+                value={t.status}
+                onChange={(e) => {
+                  const status = e.target.value as TicketStatus;
+                  patch(t.id, { status, resolved_at: status === "resolved" ? new Date().toISOString() : null });
+                }}
+                aria-label={`Status for ${t.title}`}
+              >
+                <option value="open">Open</option>
+                <option value="in_progress">In progress</option>
+                <option value="resolved">Resolved</option>
+                <option value="closed">Closed</option>
+              </select>
+            </div>
+          </Row>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+// --------------------------------------------------------------------------- Feature requests
+function FeaturesTab({ businessId }: { businessId: string }) {
+  const [list, setList] = useState<CsFeatureRequest[] | null>(null);
+  const [title, setTitle] = useState("");
+  const [detail, setDetail] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    featureRequests.list({ businessId }).then(setList).catch((e) => toast.error(msg(e)));
+  }, [businessId]);
+
+  async function add() {
+    if (!title.trim()) return;
+    setSaving(true);
+    try {
+      const created = await featureRequests.create({ business_id: businessId, title: title.trim(), detail: detail.trim() || null });
+      setList((l) => [created, ...(l ?? [])]);
+      setTitle("");
+      setDetail("");
+    } catch (e) {
+      toast.error(msg(e));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function setStatus(id: string, status: FeatureRequestStatus) {
+    try {
+      const updated = await featureRequests.update(id, { status });
+      setList((l) => (l ?? []).map((f) => (f.id === id ? updated : f)));
+    } catch (e) {
+      toast.error(msg(e));
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="space-y-2 rounded-lg border border-border/60 bg-secondary/30 p-3">
+        <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Feature request title…" aria-label="Feature title" />
+        <textarea className={textareaClass} value={detail} onChange={(e) => setDetail(e.target.value)} placeholder="Detail (optional)…" aria-label="Feature detail" />
+        <Button size="sm" onClick={add} disabled={saving || !title.trim()}>Add request</Button>
+      </div>
+
+      <ul className="space-y-2">
+        {list == null && <Empty label="Loading…" />}
+        {list?.length === 0 && <Empty label="No feature requests yet." />}
+        {list?.map((f) => (
+          <Row key={f.id}>
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="min-w-[10rem] flex-1 font-medium text-brand-dark">{f.title}</span>
+              <Badge variant="outline">{f.votes} votes</Badge>
+              <select className={selectClass} value={f.status} onChange={(e) => setStatus(f.id, e.target.value as FeatureRequestStatus)} aria-label={`Status for ${f.title}`}>
+                <option value="new">New</option>
+                <option value="planned">Planned</option>
+                <option value="shipped">Shipped</option>
+                <option value="declined">Declined</option>
+              </select>
+            </div>
+            {f.detail && <p className="mt-1.5 whitespace-pre-wrap text-sm text-muted-foreground">{f.detail}</p>}
+          </Row>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+// --------------------------------------------------------------------------- Feedback
+function FeedbackTab({ businessId }: { businessId: string }) {
+  const [list, setList] = useState<CsFeedback[] | null>(null);
+  const [rating, setRating] = useState("5");
+  const [body, setBody] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    feedback.list({ businessId }).then(setList).catch((e) => toast.error(msg(e)));
+  }, [businessId]);
+
+  async function add() {
+    if (!body.trim()) return;
+    setSaving(true);
+    try {
+      const created = await feedback.create({ business_id: businessId, rating: Number(rating), body: body.trim() });
+      setList((l) => [created, ...(l ?? [])]);
+      setBody("");
+    } catch (e) {
+      toast.error(msg(e));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="space-y-2 rounded-lg border border-border/60 bg-secondary/30 p-3">
+        <div className="flex items-center gap-2">
+          <select className={selectClass} value={rating} onChange={(e) => setRating(e.target.value)} aria-label="Rating">
+            {[5, 4, 3, 2, 1].map((n) => (
+              <option key={n} value={n}>{n} ★</option>
+            ))}
+          </select>
+          <span className="text-xs text-muted-foreground">Customer feedback</span>
+        </div>
+        <textarea className={textareaClass} value={body} onChange={(e) => setBody(e.target.value)} placeholder="What did the customer say?" aria-label="Feedback body" />
+        <Button size="sm" onClick={add} disabled={saving || !body.trim()}>Add feedback</Button>
+      </div>
+
+      <ul className="space-y-2">
+        {list == null && <Empty label="Loading…" />}
+        {list?.length === 0 && <Empty label="No feedback yet." />}
+        {list?.map((f) => (
+          <Row key={f.id}>
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-medium text-amber-600">{"★".repeat(f.rating ?? 0)}<span className="text-border">{"★".repeat(5 - (f.rating ?? 0))}</span></span>
+              <span className="text-xs text-muted-foreground">{formatRelative(f.created_at)}</span>
+            </div>
+            {f.body && <p className="mt-1.5 whitespace-pre-wrap text-sm text-foreground">{f.body}</p>}
+          </Row>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+// --------------------------------------------------------------------------- Tasks
+function TasksTab({ businessId }: { businessId: string }) {
+  const [list, setList] = useState<CsTask[] | null>(null);
+  const [title, setTitle] = useState("");
+  const [type, setType] = useState<TaskType>("follow_up");
+  const [due, setDue] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    tasks.list({ businessId }).then(setList).catch((e) => toast.error(msg(e)));
+  }, [businessId]);
+
+  async function add() {
+    if (!title.trim()) return;
+    setSaving(true);
+    try {
+      const created = await tasks.create({ business_id: businessId, title: title.trim(), type, due_date: due || null });
+      setList((l) => [created, ...(l ?? [])]);
+      setTitle("");
+      setDue("");
+    } catch (e) {
+      toast.error(msg(e));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function setStatus(id: string, status: TaskStatus) {
+    try {
+      const updated = await tasks.update(id, { status, completed_at: status === "done" ? new Date().toISOString() : null });
+      setList((l) => (l ?? []).map((t) => (t.id === id ? updated : t)));
+    } catch (e) {
+      toast.error(msg(e));
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border/60 bg-secondary/30 p-3">
+        <Input className="min-w-[180px] flex-1" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="New task…" aria-label="Task title" />
+        <select className={selectClass} value={type} onChange={(e) => setType(e.target.value as TaskType)} aria-label="Task type">
+          <option value="call">Call</option>
+          <option value="meeting">Meeting</option>
+          <option value="follow_up">Follow up</option>
+          <option value="renewal">Renewal</option>
+        </select>
+        <input type="date" className={selectClass} value={due} onChange={(e) => setDue(e.target.value)} aria-label="Task due date" />
+        <Button size="sm" onClick={add} disabled={saving || !title.trim()}>Add task</Button>
+      </div>
+
+      <ul className="space-y-2">
+        {list == null && <Empty label="Loading…" />}
+        {list?.length === 0 && <Empty label="No tasks yet." />}
+        {list?.map((t) => (
+          <Row key={t.id}>
+            <div className="flex flex-wrap items-center gap-3">
+              <span className={cn("min-w-[10rem] flex-1 font-medium", t.status === "done" ? "text-muted-foreground line-through" : "text-brand-dark")}>{t.title}</span>
+              <Badge variant="secondary" className="capitalize">{t.type.replace("_", " ")}</Badge>
+              {t.due_date && <span className="text-xs text-muted-foreground">Due {formatDate(t.due_date)}</span>}
+              <select className={selectClass} value={t.status} onChange={(e) => setStatus(t.id, e.target.value as TaskStatus)} aria-label={`Status for ${t.title}`}>
+                <option value="todo">To do</option>
+                <option value="doing">Doing</option>
+                <option value="done">Done</option>
+              </select>
+            </div>
+          </Row>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+// --------------------------------------------------------------------------- Tabs shell
+const TABS = [
+  { key: "notes", label: "Meeting Notes" },
+  { key: "tickets", label: "Support Tickets" },
+  { key: "features", label: "Feature Requests" },
+  { key: "feedback", label: "Customer Feedback" },
+  { key: "tasks", label: "Tasks" },
+] as const;
+
+type TabKey = (typeof TABS)[number]["key"];
+
+export default function CrmTabs({ businessId }: { businessId: string }) {
+  const [tab, setTab] = useState<TabKey>("notes");
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap gap-1 border-b border-border/60">
+        {TABS.map((t) => (
+          <button
+            key={t.key}
+            type="button"
+            role="tab"
+            aria-selected={tab === t.key}
+            onClick={() => setTab(t.key)}
+            className={cn(
+              "-mb-px border-b-2 px-3 py-2 text-sm font-medium transition-colors",
+              tab === t.key
+                ? "border-brand text-brand-dark"
+                : "border-transparent text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+      {tab === "notes" && <NotesTab businessId={businessId} />}
+      {tab === "tickets" && <TicketsTab businessId={businessId} />}
+      {tab === "features" && <FeaturesTab businessId={businessId} />}
+      {tab === "feedback" && <FeedbackTab businessId={businessId} />}
+      {tab === "tasks" && <TasksTab businessId={businessId} />}
+    </div>
+  );
+}

@@ -127,6 +127,42 @@ export type CustomersFacets = {
   managers: StaffMember[];
 };
 
+// Profile extras the aggregate doesn't carry (industry + owner email), for the detail page.
+export type BusinessProfileExtra = { industry: string | null; ownerEmail: string | null };
+
+export async function getBusinessProfileExtra(businessId: string): Promise<BusinessProfileExtra> {
+  const { data, error } = await supabase.rpc("admin_business_profile", { p_business_id: businessId });
+  if (error) throw error;
+  const r = (((data ?? []) as Row[])[0] ?? {}) as Row;
+  return { industry: str(r.industry), ownerEmail: str(r.owner_email) };
+}
+
+// 30/90-day usage trends for the Customer Detail "Product Usage" section (lazy-loaded).
+export type UsageMetric = { total: number; d30: number; d90: number };
+export type BusinessUsage = {
+  products: UsageMetric;
+  sales: UsageMetric;
+  revenue: UsageMetric;
+  stock: UsageMetric;
+  purchaseOrders: UsageMetric;
+  orders: UsageMetric;
+};
+
+export async function getBusinessUsage(businessId: string): Promise<BusinessUsage> {
+  const { data, error } = await supabase.rpc("admin_business_usage", { p_business_id: businessId });
+  if (error) throw error;
+  const r = (((data ?? []) as Row[])[0] ?? {}) as Row;
+  const metric = (t: unknown, a: unknown, b: unknown): UsageMetric => ({ total: num(t), d30: num(a), d90: num(b) });
+  return {
+    products: metric(r.products_total, r.products_30d, r.products_90d),
+    sales: metric(r.sales_total, r.sales_30d, r.sales_90d),
+    revenue: metric(r.revenue_total, r.revenue_30d, r.revenue_90d),
+    stock: metric(r.stock_total, r.stock_30d, r.stock_90d),
+    purchaseOrders: metric(r.po_total, r.po_30d, r.po_90d),
+    orders: metric(r.orders_total, r.orders_30d, r.orders_90d),
+  };
+}
+
 export async function getCustomersFacets(): Promise<CustomersFacets> {
   const { data, error } = await supabase.rpc("admin_customers_facets");
   if (error) throw error;
