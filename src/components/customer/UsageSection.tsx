@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { LoadingState } from "@/components/states/LoadingState";
 import { ErrorState } from "@/components/states/ErrorState";
+import { MiniBars } from "@/components/charts/Charts";
 import { getBusinessUsage, type BusinessUsage, type UsageMetric } from "@/lib/admin";
 import { formatMoney } from "@/lib/format";
 
@@ -29,11 +30,22 @@ function Tile({
         {note ? (
           <p className="mt-1 text-xs text-muted-foreground">{note}</p>
         ) : metric ? (
-          <p className="mt-1 text-xs text-muted-foreground">
-            <span className="font-medium text-foreground">+{fmt(metric.d30)}</span> · 30d
-            <span className="mx-1.5 text-border">|</span>
-            <span className="font-medium text-foreground">+{fmt(metric.d90)}</span> · 90d
-          </p>
+          <div className="mt-2 flex items-end justify-between gap-3">
+            <p className="text-xs text-muted-foreground">
+              <span className="font-medium text-foreground">+{fmt(metric.d30)}</span> · 30d
+              <span className="mx-1.5 text-border">|</span>
+              <span className="font-medium text-foreground">+{fmt(metric.d90)}</span> · 90d
+            </p>
+            <MiniBars
+              data={[
+                { label: "30d", value: metric.d30 },
+                { label: "90d", value: metric.d90 },
+              ]}
+              height={32}
+              barClass="fill-brand/70"
+              ariaLabel={`${label}: ${fmt(metric.d30)} in the last 30 days, ${fmt(metric.d90)} in the last 90 days`}
+            />
+          </div>
         ) : null}
       </CardContent>
     </Card>

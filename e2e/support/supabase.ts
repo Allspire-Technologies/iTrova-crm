@@ -176,11 +176,45 @@ const ALERT = {
   resolved_at: null,
 };
 
+// Health trend (admin_health_trend) + per-business snapshot history (cs_health_snapshot).
+const HEALTH_TREND = [
+  { day: "2026-06-10", at_risk: 5, yellow: 8, green: 20, total: 33 },
+  { day: "2026-06-17", at_risk: 4, yellow: 9, green: 21, total: 34 },
+  { day: "2026-06-24", at_risk: 6, yellow: 7, green: 22, total: 35 },
+];
+const HEALTH_HISTORY = [
+  { id: "s3", business_id: CUSTOMER.id, score: 30, band: "red", reasons: [], captured_at: "2026-06-24T02:00:00Z", created_at: "2026-06-24T02:00:00Z", updated_at: "2026-06-24T02:00:00Z" },
+  { id: "s2", business_id: CUSTOMER.id, score: 45, band: "yellow", reasons: [], captured_at: "2026-06-17T02:00:00Z", created_at: "2026-06-17T02:00:00Z", updated_at: "2026-06-17T02:00:00Z" },
+  { id: "s1", business_id: CUSTOMER.id, score: 60, band: "yellow", reasons: [], captured_at: "2026-06-10T02:00:00Z", created_at: "2026-06-10T02:00:00Z", updated_at: "2026-06-10T02:00:00Z" },
+];
+
+// Tunable thresholds (cs_settings singleton).
+export const SETTINGS = {
+  singleton: true,
+  login_green_days: 7, login_yellow_days: 14, login_red_days: 30,
+  sales_green_days: 7, sales_mid_days: 14, sales_window_days: 30,
+  products_stale_days: 30, adoption_active_days: 14,
+  renewal_healthy_days: 30, renewal_window_days: 14,
+  band_green_min: 70, band_yellow_min: 40, warning_no_sales_days: 14,
+  updated_at: CUSTOMER.created_at,
+};
+
+export async function stubSettings(page: Page) {
+  await page.route("**/rest/v1/cs_settings**", (r) => json(r, SETTINGS));
+  await page.route("**/rest/v1/rpc/admin_customers_page**", (r) => json(r, [PAGE_ROW]));
+  await page.route("**/rest/v1/rpc/admin_customers_facets**", (r) => json(r, FACETS));
+  await page.route("**/rest/v1/cs_account_assignment**", (r) =>
+    json(r, { business_id: CUSTOMER.id, account_manager_id: MANAGER.id, assigned_at: CUSTOMER.created_at, created_at: CUSTOMER.created_at, updated_at: CUSTOMER.created_at }),
+  );
+}
+
 export async function stubCustomers(page: Page) {
   // Both the table (no arg) and the detail (p_business_id) hit the same RPC.
   await page.route("**/rest/v1/rpc/admin_business_aggregates**", (r) => json(r, [AGG]));
   await page.route("**/rest/v1/rpc/admin_dashboard_kpis**", (r) => json(r, [KPI]));
   await page.route("**/rest/v1/cs_health_current**", (r) => json(r, [HEALTH]));
+  await page.route("**/rest/v1/cs_health_snapshot**", (r) => json(r, HEALTH_HISTORY));
+  await page.route("**/rest/v1/rpc/admin_health_trend**", (r) => json(r, HEALTH_TREND));
   await page.route("**/rest/v1/cs_alert_active**", (r) => json(r, [ALERT]));
   // Customer Overview (§7.2): the server-side paginated page + its filter facets.
   await page.route("**/rest/v1/rpc/admin_customers_page**", (r) => json(r, [PAGE_ROW]));

@@ -128,6 +128,21 @@ export type CustomersFacets = {
   managers: StaffMember[];
 };
 
+// Daily health-band trend for the Home chart. From admin_health_trend().
+export type HealthTrendPoint = { day: string; atRisk: number; yellow: number; green: number; total: number };
+
+export async function getHealthTrend(days = 30): Promise<HealthTrendPoint[]> {
+  const { data, error } = await supabase.rpc("admin_health_trend", { p_days: days });
+  if (error) throw error;
+  return ((data ?? []) as Row[]).map((r) => ({
+    day: String(r.day),
+    atRisk: num(r.at_risk),
+    yellow: num(r.yellow),
+    green: num(r.green),
+    total: num(r.total),
+  }));
+}
+
 // Customer Success Pipeline board (PRD §7.6) — one card per business. From admin_pipeline_board().
 export type PipelineCard = {
   businessId: string;
