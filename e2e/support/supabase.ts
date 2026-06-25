@@ -205,3 +205,35 @@ export async function stubCustomers(page: Page) {
 }
 
 export { BIZ_ALERT, PROFILE_EXTRA };
+
+// Customer Success Pipeline board (§7.6) — two businesses in different stages.
+export const BOARD_OTHER = { id: "aaaaaaaa-0000-0000-0000-000000000099", name: "Bright Stores" };
+const BOARD = [
+  {
+    business_id: CUSTOMER.id,
+    name: CUSTOMER.name,
+    stage: "onboarding",
+    stage_source: "auto",
+    health_band: "red",
+    health_score: 30,
+    renewal_date: null,
+    account_manager_id: MANAGER.id,
+    account_manager_name: MANAGER.name,
+  },
+  {
+    business_id: BOARD_OTHER.id,
+    name: BOARD_OTHER.name,
+    stage: "active",
+    stage_source: "auto",
+    health_band: "green",
+    health_score: 88,
+    renewal_date: "2026-09-01T00:00:00Z",
+    account_manager_id: null,
+    account_manager_name: null,
+  },
+];
+
+export async function stubPipeline(page: Page) {
+  await page.route("**/rest/v1/rpc/admin_pipeline_board**", (r) => json(r, BOARD));
+  await page.route("**/rest/v1/cs_pipeline**", (r) => json(r, [PIPELINE]));
+}
