@@ -1,4 +1,5 @@
 import type { LucideIcon } from "lucide-react";
+import { Link } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 
 export function StatCard({
@@ -6,14 +7,16 @@ export function StatCard({
   value,
   hint,
   icon: Icon,
+  to,
 }: {
   label: string;
   value: string;
   hint?: string;
   icon: LucideIcon;
+  to?: string;
 }) {
-  return (
-    <Card>
+  const card = (
+    <Card className={to ? "h-full transition-colors hover:border-brand/40 hover:bg-secondary/30" : "h-full"}>
       <CardContent className="flex items-start justify-between gap-4 p-5">
         <div>
           <p className="text-xs uppercase tracking-wide text-muted-foreground">{label}</p>
@@ -25,5 +28,12 @@ export function StatCard({
         </div>
       </CardContent>
     </Card>
+  );
+  return to ? (
+    <Link to={to} className="block focus:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-xl">
+      {card}
+    </Link>
+  ) : (
+    card
   );
 }
