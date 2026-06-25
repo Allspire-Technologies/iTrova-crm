@@ -200,6 +200,8 @@ export async function stubCustomers(page: Page) {
       ? json(r, [{ id: "00000000-0000-0000-0000-0000000000a1", business_id: CUSTOMER.id, author_id: null, type: "general", body: "Logged a kickoff call", created_at: CUSTOMER.created_at, updated_at: CUSTOMER.created_at }])
       : json(r, []),
   );
+  // Tasks: empty on the detail tab; create (incl. one-click from an alert) echoes a row.
+  await page.route("**/rest/v1/cs_task**", (r) => (r.request().method() === "POST" ? json(r, [CREATED_TASK]) : json(r, [])));
   // The detail page still reads the team from profiles (admin-read RLS).
   await page.route("**/rest/v1/profiles**", (r) => json(r, [OWNER]));
 }
@@ -236,4 +238,33 @@ const BOARD = [
 export async function stubPipeline(page: Page) {
   await page.route("**/rest/v1/rpc/admin_pipeline_board**", (r) => json(r, BOARD));
   await page.route("**/rest/v1/cs_pipeline**", (r) => json(r, [PIPELINE]));
+}
+
+// Tasks queue (§7.7).
+export const TASK_ROW = {
+  id: "11111111-aaaa-0000-0000-000000000001",
+  business_id: CUSTOMER.id,
+  business_name: CUSTOMER.name,
+  title: "Renewal discussion",
+  type: "renewal",
+  assignee_role: "cso",
+  assignee_id: null,
+  created_by: null,
+  due_date: "2026-07-02",
+  status: "todo",
+  created_at: CUSTOMER.created_at,
+  updated_at: CUSTOMER.created_at,
+  completed_at: null,
+};
+const CREATED_TASK = { ...TASK_ROW, id: "22222222-aaaa-0000-0000-000000000002", title: "Logged a kickoff call" };
+
+export async function stubTasks(page: Page) {
+  // Register cs_task first, then cs_task_admin, so the admin view wins (last match wins).
+  await page.route("**/rest/v1/cs_task**", (r) => {
+    const m = r.request().method();
+    if (m === "POST") return json(r, [CREATED_TASK]);
+    if (m === "PATCH") return json(r, [{ ...TASK_ROW, status: "done", completed_at: CUSTOMER.created_at }]);
+    return json(r, [TASK_ROW]);
+  });
+  await page.route("**/rest/v1/cs_task_admin**", (r) => json(r, [TASK_ROW]));
 }
