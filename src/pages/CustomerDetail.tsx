@@ -13,10 +13,11 @@ import { SubscriptionBadge, PlanBadge } from "@/components/SubscriptionBadge";
 import { HealthBadge } from "@/components/HealthBadge";
 import { StatCard } from "@/components/StatCard";
 import { LazyInView } from "@/components/LazyInView";
+import { Sparkline } from "@/components/charts/Charts";
 import { UsageSection } from "@/components/customer/UsageSection";
 import { WorkflowSection } from "@/components/customer/WorkflowSection";
 import { getCustomer, type CustomerDetail as Detail } from "@/lib/customers";
-import { getCurrentHealth } from "@/lib/health";
+import { getCurrentHealth, listHealthHistory } from "@/lib/health";
 import { pipeline } from "@/lib/cs";
 import type { CsPipeline, HealthBand, PipelineStage } from "@/lib/cs";
 import { formatDate, formatMoney, formatRelative } from "@/lib/format";
@@ -66,6 +67,7 @@ export default function CustomerDetail() {
   const [data, setData] = useState<Detail | null | undefined>(undefined);
   const [health, setHealth] = useState<Health>(null);
   const [stage, setStage] = useState<CsPipeline | null>(null);
+  const [scores, setScores] = useState<number[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
 
@@ -78,12 +80,15 @@ export default function CustomerDetail() {
       getCustomer(id),
       getCurrentHealth(id).catch(() => null),
       pipeline.get(id).catch(() => null),
+      listHealthHistory(id).catch(() => []),
     ])
-      .then(([d, h, p]) => {
+      .then(([d, h, p, hist]) => {
         if (cancelled) return;
         setData(d);
         setHealth(h ? { score: h.score, band: h.band, reasons: h.reasons } : null);
         setStage(p);
+        // History comes back newest-first; chart wants oldest→newest. Last ~30 points.
+        setScores([...hist].reverse().slice(-30).map((s) => s.score));
       })
       .catch((e) => {
         if (!cancelled) setError(e?.message ?? "Failed to load this customer.");
@@ -159,6 +164,17 @@ export default function CustomerDetail() {
               <Field label="Renewal date">{formatDate(sub?.currentPeriodEnd)}</Field>
               <Field label="Pipeline stage">{stage ? STAGE_LABELS[stage.stage] : "—"}</Field>
             </dl>
+            {scores.length >= 2 && (
+              <div className="mt-5 flex items-center justify-between gap-4 border-t border-border/60 pt-4">
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">Health trend</p>
+                <Sparkline
+                  values={scores}
+                  width={180}
+                  height={36}
+                  ariaLabel={`Health score over the last ${scores.length} snapshots, currently ${scores[scores.length - 1]}`}
+                />
+              </div>
+            )}
             {reasons.length > 0 && (
               <div className="mt-5 border-t border-border/60 pt-4">
                 <p className="text-xs uppercase tracking-wide text-muted-foreground">Health reasons</p>

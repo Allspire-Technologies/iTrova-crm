@@ -15,6 +15,8 @@ test.describe("Dashboard", () => {
     await expect(page.getByText("Total Businesses")).toBeVisible();
     await expect(page.getByText("MRR", { exact: true })).toBeVisible();
     await expect(page.getByText("Businesses At Risk")).toBeVisible();
+    // The cs_health_snapshot history drives the at-risk trend chart.
+    await expect(page.getByText("At-risk trend")).toBeVisible();
     // The stubbed churn alert surfaces the business in the at-risk list.
     await expect(page.getByText(CUSTOMER.name)).toBeVisible();
   });

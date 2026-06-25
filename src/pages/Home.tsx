@@ -17,11 +17,14 @@ import { ErrorState } from "@/components/states/ErrorState";
 import { StatCard } from "@/components/StatCard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Sparkline } from "@/components/charts/Charts";
 import { getHomeData, type HomeData } from "@/lib/home";
+import { getHealthTrend, type HealthTrendPoint } from "@/lib/admin";
 import { formatDate, formatMoney } from "@/lib/format";
 
 export default function Home() {
   const [data, setData] = useState<HomeData | null>(null);
+  const [trend, setTrend] = useState<HealthTrendPoint[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
 
@@ -36,6 +39,18 @@ export default function Home() {
       .catch((e) => {
         if (!cancelled) setError(e?.message ?? "Failed to load dashboard.");
       });
+    return () => {
+      cancelled = true;
+    };
+  }, [reloadKey]);
+
+  // At-risk trend is a small extra read (cs_health_snapshot history) — kept off the critical path.
+  useEffect(() => {
+    let cancelled = false;
+    setTrend(null);
+    getHealthTrend(30)
+      .then((t) => !cancelled && setTrend(t))
+      .catch(() => !cancelled && setTrend([]));
     return () => {
       cancelled = true;
     };
@@ -62,6 +77,38 @@ export default function Home() {
             <StatCard label="Due For Renewal" value={String(data.kpis.dueRenewal)} hint="Next 14 days" icon={CalendarClock} to="/customers?filter=renewal_due" />
             <StatCard label="New This Month" value={String(data.kpis.newThisMonth)} icon={Sparkles} to="/customers?filter=new_this_month" />
           </div>
+
+          <Card>
+            <CardHeader className="flex-row items-center justify-between space-y-0">
+              <CardTitle className="flex items-center gap-2">
+                <TrendingUp className="size-4 text-destructive" /> At-risk trend — last 30 days
+              </CardTitle>
+              {trend && trend.length > 0 && (
+                <span className="text-sm text-muted-foreground">now {trend[trend.length - 1].atRisk}</span>
+              )}
+            </CardHeader>
+            <CardContent>
+              {trend === null ? (
+                <p className="py-4 text-sm text-muted-foreground">Loading trend…</p>
+              ) : trend.length < 2 ? (
+                <p className="py-4 text-sm text-muted-foreground">Not enough snapshot history yet — the trend builds up nightly.</p>
+              ) : (
+                <div className="flex items-end gap-4">
+                  <div className="font-display text-3xl font-bold text-destructive">{trend[trend.length - 1].atRisk}</div>
+                  <Sparkline
+                    values={trend.map((t) => t.atRisk)}
+                    width={260}
+                    height={48}
+                    strokeClass="stroke-destructive"
+                    fillClass="fill-destructive/10"
+                    dotClass="fill-destructive"
+                    className="flex-1"
+                    ariaLabel={`At-risk businesses over the last ${trend.length} days, from ${trend[0].atRisk} to ${trend[trend.length - 1].atRisk}`}
+                  />
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
           <div className="grid gap-6 lg:grid-cols-2">
             <Card>

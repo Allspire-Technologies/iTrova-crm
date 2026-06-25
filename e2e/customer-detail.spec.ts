@@ -18,6 +18,7 @@ test.describe("Customer Detail (§7.4)", () => {
     await expect(page.getByText("Food & Beverage")).toBeVisible();
     await expect(page.getByText("Onboarding").first()).toBeVisible();
     await expect(page.getByText("No login in 21 days")).toBeVisible();
+    await expect(page.getByText("Health trend")).toBeVisible(); // sparkline from snapshot history
   });
 
   test("recompute health calls the staff-gated RPC", async ({ page }) => {
