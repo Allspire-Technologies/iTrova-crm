@@ -22,7 +22,9 @@ import {
   type FeatureRequestStatus,
   type TaskStatus,
   type TaskType,
+  type TaskRole,
 } from "@/lib/cs";
+import { ROLE_LABELS } from "@/lib/tasks";
 
 const selectClass =
   "h-9 rounded-md border border-input bg-background px-2 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring";
@@ -338,6 +340,7 @@ function TasksTab({ businessId }: { businessId: string }) {
   const [list, setList] = useState<CsTask[] | null>(null);
   const [title, setTitle] = useState("");
   const [type, setType] = useState<TaskType>("follow_up");
+  const [role, setRole] = useState<TaskRole>("cso");
   const [due, setDue] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -349,7 +352,7 @@ function TasksTab({ businessId }: { businessId: string }) {
     if (!title.trim()) return;
     setSaving(true);
     try {
-      const created = await tasks.create({ business_id: businessId, title: title.trim(), type, due_date: due || null });
+      const created = await tasks.create({ business_id: businessId, title: title.trim(), type, assignee_role: role, due_date: due || null });
       setList((l) => [created, ...(l ?? [])]);
       setTitle("");
       setDue("");
@@ -379,6 +382,11 @@ function TasksTab({ businessId }: { businessId: string }) {
           <option value="follow_up">Follow up</option>
           <option value="renewal">Renewal</option>
         </select>
+        <select className={selectClass} value={role} onChange={(e) => setRole(e.target.value as TaskRole)} aria-label="Assign to">
+          <option value="pm">Product Manager</option>
+          <option value="cso">Customer Success Officer</option>
+          <option value="support">Support Team</option>
+        </select>
         <input type="date" className={selectClass} value={due} onChange={(e) => setDue(e.target.value)} aria-label="Task due date" />
         <Button size="sm" onClick={add} disabled={saving || !title.trim()}>Add task</Button>
       </div>
@@ -391,6 +399,7 @@ function TasksTab({ businessId }: { businessId: string }) {
             <div className="flex flex-wrap items-center gap-3">
               <span className={cn("min-w-[10rem] flex-1 font-medium", t.status === "done" ? "text-muted-foreground line-through" : "text-brand-dark")}>{t.title}</span>
               <Badge variant="secondary" className="capitalize">{t.type.replace("_", " ")}</Badge>
+              {t.assignee_role && <span className="text-xs text-muted-foreground">{ROLE_LABELS[t.assignee_role]}</span>}
               {t.due_date && <span className="text-xs text-muted-foreground">Due {formatDate(t.due_date)}</span>}
               <select className={selectClass} value={t.status} onChange={(e) => setStatus(t.id, e.target.value as TaskStatus)} aria-label={`Status for ${t.title}`}>
                 <option value="todo">To do</option>

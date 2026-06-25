@@ -98,11 +98,13 @@ export type CsFeedback = {
 
 export type TaskType = "call" | "meeting" | "follow_up" | "renewal";
 export type TaskStatus = "todo" | "doing" | "done";
+export type TaskRole = "pm" | "cso" | "support";
 export type CsTask = {
   id: string;
   business_id: string | null;
   title: string;
   type: TaskType;
+  assignee_role: TaskRole | null;
   assignee_id: string | null;
   created_by: string | null;
   due_date: string | null;
@@ -178,6 +180,7 @@ export type CsTaskInsert = {
   business_id?: string | null;
   title: string;
   type?: TaskType;
+  assignee_role?: TaskRole | null;
   assignee_id?: string | null;
   due_date?: string | null;
   status?: TaskStatus;
@@ -185,6 +188,7 @@ export type CsTaskInsert = {
 export type CsTaskUpdate = Partial<{
   title: string;
   type: TaskType;
+  assignee_role: TaskRole | null;
   assignee_id: string | null;
   due_date: string | null;
   status: TaskStatus;

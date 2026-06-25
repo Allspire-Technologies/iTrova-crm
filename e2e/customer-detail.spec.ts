@@ -43,6 +43,17 @@ test.describe("Customer Detail (§7.4)", () => {
     await patch;
   });
 
+  test("creates a task from an alert (writes cs_task)", async ({ page }) => {
+    await signIn(page, { staff: true });
+    await stubCustomers(page);
+    await page.goto(`/customers/${CUSTOMER.id}`);
+
+    await expect(page.getByText("No login for 21 days")).toBeVisible();
+    const post = page.waitForRequest((r) => r.url().includes("/rest/v1/cs_task") && r.method() === "POST");
+    await page.getByRole("button", { name: "Create task" }).click();
+    await post;
+  });
+
   test("lazily loads the CRM tabs and adds a note (writes cs_note)", async ({ page }) => {
     await signIn(page, { staff: true });
     await stubCustomers(page);

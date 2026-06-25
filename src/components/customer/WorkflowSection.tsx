@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { RefreshCw, ShieldCheck, CheckCircle2, BellRing } from "lucide-react";
+import { RefreshCw, ShieldCheck, CheckCircle2, BellRing, ListPlus } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -8,6 +8,7 @@ import { ErrorState } from "@/components/states/ErrorState";
 import { useAuth } from "@/contexts/AuthContext";
 import { listBusinessAlerts, acknowledgeAlert, resolveAlert, recomputeAlerts } from "@/lib/alerts";
 import { recomputeHealth } from "@/lib/health";
+import { createTask, alertToTaskInput } from "@/lib/tasks";
 import type { CsAlert, CsHealthSnapshot, AlertSeverity } from "@/lib/cs";
 import { formatRelative } from "@/lib/format";
 
@@ -94,6 +95,18 @@ export function WorkflowSection({
     }
   }
 
+  async function onCreateTask(a: CsAlert) {
+    setBusy(`task:${a.id}`);
+    try {
+      await createTask(alertToTaskInput({ business_id: a.business_id, kind: a.kind }));
+      toast.success("Task created from alert.");
+    } catch (e) {
+      toast.error((e as { message?: string })?.message ?? "Couldn't create the task.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
@@ -126,6 +139,9 @@ export function WorkflowSection({
                 </span>
               )}
               <span className="text-xs text-muted-foreground">{formatRelative(a.created_at)}</span>
+              <Button size="sm" variant="ghost" onClick={() => onCreateTask(a)} disabled={busy === `task:${a.id}`} title="Create a prefilled task from this alert">
+                <ListPlus /> Create task
+              </Button>
               {a.status === "active" && (
                 <Button size="sm" variant="ghost" onClick={() => onAck(a.id)} disabled={busy === a.id}>
                   Acknowledge
