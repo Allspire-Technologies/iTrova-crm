@@ -84,6 +84,8 @@ export default function Customers() {
                   <TableHead>Plan</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Amount</TableHead>
+                  <TableHead className="text-right">Revenue</TableHead>
+                  <TableHead className="text-right">Users</TableHead>
                   <TableHead>Joined</TableHead>
                 </TableRow>
               </TableHeader>
@@ -101,12 +103,14 @@ export default function Customers() {
                     <TableCell className="text-right tabular-nums">
                       {r.amount != null ? formatMoney(r.amount, r.currency) : "—"}
                     </TableCell>
+                    <TableCell className="text-right tabular-nums">{formatMoney(r.revenueRecorded, r.currency)}</TableCell>
+                    <TableCell className="text-right tabular-nums">{r.totalUsers}</TableCell>
                     <TableCell className="text-muted-foreground">{formatDate(r.createdAt)}</TableCell>
                   </TableRow>
                 ))}
                 {filtered.length === 0 && (
                   <TableRow className="hover:bg-transparent">
-                    <TableCell colSpan={6} className="py-10 text-center text-muted-foreground">
+                    <TableCell colSpan={8} className="py-10 text-center text-muted-foreground">
                       No businesses match “{query}”.
                     </TableCell>
                   </TableRow>

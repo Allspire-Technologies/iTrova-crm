@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Building2, BadgeCheck, Banknote, Sparkles } from "lucide-react";
+import { Building2, BadgeCheck, Banknote, Sparkles, Receipt, ShoppingCart, Package, TrendingUp } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { LoadingState } from "@/components/states/LoadingState";
 import { ErrorState } from "@/components/states/ErrorState";
@@ -46,6 +46,14 @@ export default function Home() {
             <StatCard label="Active subscriptions" value={String(stats.activeSubscriptions)} icon={BadgeCheck} />
             <StatCard label="MRR" value={formatMoney(stats.mrr, stats.currency)} hint="Monthly-normalised" icon={Banknote} />
             <StatCard label="New this month" value={String(stats.newThisMonth)} icon={Sparkles} />
+            <StatCard label="Revenue recorded" value={formatMoney(stats.totalRevenue, stats.currency)} hint="All businesses" icon={Receipt} />
+            <StatCard label="Sales recorded" value={String(stats.totalSales)} icon={ShoppingCart} />
+            <StatCard label="Products" value={String(stats.totalProducts)} icon={Package} />
+            <StatCard
+              label="Avg revenue / business"
+              value={formatMoney(stats.totalBusinesses ? Math.round(stats.totalRevenue / stats.totalBusinesses) : 0, stats.currency)}
+              icon={TrendingUp}
+            />
           </div>
 
           <div className="grid gap-6 lg:grid-cols-3">

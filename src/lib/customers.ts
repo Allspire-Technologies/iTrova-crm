@@ -1,64 +1,50 @@
 import { supabase } from "@/integrations/supabase/client";
+import {
+  getBusinessAggregate,
+  listBusinessAggregates,
+  type BusinessAggregate,
+  type SubscriptionStatus,
+} from "@/lib/admin";
 
-// Cross-tenant reads, allowed only because the signed-in user is a platform admin
-// (the admin-read RLS policies). A non-admin session sees nothing here.
+export type { SubscriptionStatus };
 
-export type SubscriptionStatus =
-  | "trialing"
-  | "active"
-  | "past_due"
-  | "canceled"
-  | "expired";
+// All data here comes from the staff-gated aggregate RPCs (see lib/admin.ts). The team
+// list still reads profiles directly — allowed by the admin-read RLS, which also verifies
+// is_platform_admin().
 
 export type CustomerRow = {
   id: string;
   name: string;
   currency: string;
   planKey: string | null;
-  ownerId: string;
   ownerName: string | null;
   status: SubscriptionStatus | null;
   amount: number | null;
+  totalUsers: number;
+  salesCount: number;
+  revenueRecorded: number;
   createdAt: string;
 };
 
+function toRow(a: BusinessAggregate): CustomerRow {
+  return {
+    id: a.businessId,
+    name: a.name,
+    currency: a.currency,
+    planKey: a.planKey,
+    ownerName: a.ownerName,
+    status: a.subscriptionStatus,
+    amount: a.subscriptionAmount,
+    totalUsers: a.totalUsers,
+    salesCount: a.salesCount,
+    revenueRecorded: a.revenueRecorded,
+    createdAt: a.joinedAt,
+  };
+}
+
 export async function listCustomers(): Promise<CustomerRow[]> {
-  const { data: businesses, error } = await supabase
-    .from("businesses")
-    .select("id, name, currency, subscription_tier, owner_id, created_at")
-    .order("created_at", { ascending: false });
-  if (error) throw error;
-
-  const rows = businesses ?? [];
-  if (rows.length === 0) return [];
-
-  const ownerIds = [...new Set(rows.map((b) => b.owner_id).filter(Boolean))];
-  const bizIds = rows.map((b) => b.id);
-
-  const [profilesRes, subsRes] = await Promise.all([
-    supabase.from("profiles").select("id, owner_name").in("id", ownerIds),
-    supabase.from("subscriptions").select("business_id, status, amount").in("business_id", bizIds),
-  ]);
-  if (profilesRes.error) throw profilesRes.error;
-  if (subsRes.error) throw subsRes.error;
-
-  const ownerById = new Map((profilesRes.data ?? []).map((p) => [p.id, p.owner_name as string]));
-  const subByBiz = new Map((subsRes.data ?? []).map((s) => [s.business_id, s]));
-
-  return rows.map((b) => {
-    const sub = subByBiz.get(b.id);
-    return {
-      id: b.id,
-      name: b.name,
-      currency: b.currency,
-      planKey: b.subscription_tier,
-      ownerId: b.owner_id,
-      ownerName: ownerById.get(b.owner_id) ?? null,
-      status: (sub?.status as SubscriptionStatus | undefined) ?? null,
-      amount: sub?.amount ?? null,
-      createdAt: b.created_at,
-    };
-  });
+  const aggs = await listBusinessAggregates();
+  return aggs.map(toRow);
 }
 
 export type TeamMember = {
@@ -79,6 +65,20 @@ export type CustomerSubscription = {
   startedAt: string | null;
 };
 
+export type CustomerMetrics = {
+  totalUsers: number;
+  activeUsers: number;
+  lastLogin: string | null;
+  productsTotal: number;
+  productsAdded30d: number;
+  productsLowStock: number;
+  stockMovements: number;
+  purchaseOrders: number;
+  salesCount: number;
+  revenueRecorded: number;
+  ordersCount: number;
+};
+
 export type CustomerDetail = {
   id: string;
   name: string;
@@ -89,62 +89,60 @@ export type CustomerDetail = {
   ownerId: string;
   createdAt: string;
   subscription: CustomerSubscription | null;
+  metrics: CustomerMetrics;
   team: TeamMember[];
 };
 
 export async function getCustomer(id: string): Promise<CustomerDetail | null> {
-  const { data: biz, error } = await supabase
-    .from("businesses")
-    .select("id, name, currency, subscription_tier, timezone, whatsapp_number, owner_id, created_at")
-    .eq("id", id)
-    .maybeSingle();
+  const agg = await getBusinessAggregate(id);
+  if (!agg) return null;
+
+  const { data: team, error } = await supabase
+    .from("profiles")
+    .select("id, owner_name, phone, last_seen")
+    .eq("business_id", id)
+    .order("created_at", { ascending: true });
   if (error) throw error;
-  if (!biz) return null;
 
-  const [teamRes, subRes] = await Promise.all([
-    supabase
-      .from("profiles")
-      .select("id, owner_name, phone, last_seen")
-      .eq("business_id", id)
-      .order("created_at", { ascending: true }),
-    supabase
-      .from("subscriptions")
-      .select("plan_key, cycle, status, amount, currency, current_period_end, started_at")
-      .eq("business_id", id)
-      .maybeSingle(),
-  ]);
-  if (teamRes.error) throw teamRes.error;
-  if (subRes.error) throw subRes.error;
-
-  const team: TeamMember[] = (teamRes.data ?? []).map((p) => ({
-    id: p.id,
-    name: p.owner_name ?? null,
-    phone: p.phone ?? null,
-    lastSeen: p.last_seen ?? null,
-    isOwner: p.id === biz.owner_id,
-  }));
-
-  const sub = subRes.data;
   return {
-    id: biz.id,
-    name: biz.name,
-    currency: biz.currency,
-    planKey: biz.subscription_tier,
-    timezone: biz.timezone,
-    whatsappNumber: biz.whatsapp_number,
-    ownerId: biz.owner_id,
-    createdAt: biz.created_at,
-    subscription: sub
+    id: agg.businessId,
+    name: agg.name,
+    currency: agg.currency,
+    planKey: agg.planKey,
+    timezone: agg.timezone,
+    whatsappNumber: agg.whatsappNumber,
+    ownerId: agg.ownerId,
+    createdAt: agg.joinedAt,
+    subscription: agg.subscriptionStatus
       ? {
-          planKey: sub.plan_key,
-          cycle: sub.cycle,
-          status: sub.status as SubscriptionStatus,
-          amount: sub.amount,
-          currency: sub.currency,
-          currentPeriodEnd: sub.current_period_end,
-          startedAt: sub.started_at,
+          planKey: agg.planKey ?? "",
+          cycle: agg.subscriptionCycle ?? "",
+          status: agg.subscriptionStatus,
+          amount: agg.subscriptionAmount ?? 0,
+          currency: agg.currency,
+          currentPeriodEnd: agg.renewalDate,
+          startedAt: agg.subscriptionStarted,
         }
       : null,
-    team,
+    metrics: {
+      totalUsers: agg.totalUsers,
+      activeUsers: agg.activeUsers,
+      lastLogin: agg.lastLogin,
+      productsTotal: agg.productsTotal,
+      productsAdded30d: agg.productsAdded30d,
+      productsLowStock: agg.productsLowStock,
+      stockMovements: agg.stockMovements,
+      purchaseOrders: agg.purchaseOrders,
+      salesCount: agg.salesCount,
+      revenueRecorded: agg.revenueRecorded,
+      ordersCount: agg.ordersCount,
+    },
+    team: (team ?? []).map((p) => ({
+      id: p.id,
+      name: p.owner_name ?? null,
+      phone: p.phone ?? null,
+      lastSeen: p.last_seen ?? null,
+      isOwner: p.id === agg.ownerId,
+    })),
   };
 }
