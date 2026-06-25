@@ -1,11 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
-import {
-  getBusinessAggregate,
-  listBusinessAggregates,
-  type BusinessAggregate,
-  type SubscriptionStatus,
-} from "@/lib/admin";
-import { listCurrentHealth } from "@/lib/health";
+import { getBusinessAggregate, type SubscriptionStatus } from "@/lib/admin";
 import type { HealthBand } from "@/lib/cs";
 
 export type { SubscriptionStatus };
@@ -14,46 +8,119 @@ export type { SubscriptionStatus };
 // list still reads profiles directly — allowed by the admin-read RLS, which also verifies
 // is_platform_admin().
 
-export type CustomerRow = {
-  id: string;
+type Row = Record<string, unknown>;
+const num = (v: unknown): number => (v == null ? 0 : Number(v));
+const str = (v: unknown): string | null => (v == null ? null : String(v));
+
+// ----------------------------------------------------------------------------
+// Customer Overview table (PRD §7.2) — server-side paginated/filtered/sorted.
+// The whole list is computed in Postgres (admin_customers_page) so the browser
+// never loads every business client-side.
+// ----------------------------------------------------------------------------
+export type CustomerPageRow = {
+  businessId: string;
   name: string;
-  currency: string;
+  industry: string | null;
   planKey: string | null;
-  ownerName: string | null;
-  status: SubscriptionStatus | null;
-  amount: number | null;
-  totalUsers: number;
+  subscriptionStatus: SubscriptionStatus | null;
+  joinedAt: string;
+  productsTotal: number;
   salesCount: number;
-  revenueRecorded: number;
-  createdAt: string;
-  renewalDate: string | null;
+  totalUsers: number;
   lastLogin: string | null;
-  band: HealthBand | null;
+  renewalDate: string | null;
+  healthScore: number | null;
+  healthBand: HealthBand | null;
+  accountManagerId: string | null;
+  accountManagerName: string | null;
+  ownerName: string | null;
 };
 
-function toRow(a: BusinessAggregate, band: HealthBand | null): CustomerRow {
+export type CustomersSort =
+  | "health"
+  | "name"
+  | "industry"
+  | "plan"
+  | "status"
+  | "joined"
+  | "products"
+  | "sales"
+  | "users"
+  | "last_login"
+  | "renewal"
+  | "manager";
+
+export type CustomersQuery = {
+  search?: string;
+  band?: HealthBand;
+  plan?: string;
+  subscriptionStatus?: SubscriptionStatus;
+  industry?: string;
+  accountManager?: string; // uuid
+  unassigned?: boolean;
+  renewalDue?: boolean;
+  atRisk?: boolean;
+  active?: boolean; // login ≤ 30d
+  newThisMonth?: boolean;
+  sort?: CustomersSort;
+  dir?: "asc" | "desc";
+  page?: number; // 1-based
+  pageSize?: number;
+};
+
+export type CustomersPage = {
+  rows: CustomerPageRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+};
+
+function mapPageRow(r: Row): CustomerPageRow {
   return {
-    id: a.businessId,
-    name: a.name,
-    currency: a.currency,
-    planKey: a.planKey,
-    ownerName: a.ownerName,
-    status: a.subscriptionStatus,
-    amount: a.subscriptionAmount,
-    totalUsers: a.totalUsers,
-    salesCount: a.salesCount,
-    revenueRecorded: a.revenueRecorded,
-    createdAt: a.joinedAt,
-    renewalDate: a.renewalDate,
-    lastLogin: a.lastLogin,
-    band,
+    businessId: String(r.business_id),
+    name: String(r.name),
+    industry: str(r.industry),
+    planKey: str(r.plan_key),
+    subscriptionStatus: (str(r.subscription_status) as SubscriptionStatus | null),
+    joinedAt: String(r.joined_at),
+    productsTotal: num(r.products_total),
+    salesCount: num(r.sales_count),
+    totalUsers: num(r.total_users),
+    lastLogin: str(r.last_login),
+    renewalDate: str(r.renewal_date),
+    healthScore: r.health_score == null ? null : num(r.health_score),
+    healthBand: (str(r.health_band) as HealthBand | null),
+    accountManagerId: str(r.account_manager_id),
+    accountManagerName: str(r.account_manager_name),
+    ownerName: str(r.owner_name),
   };
 }
 
-export async function listCustomers(): Promise<CustomerRow[]> {
-  const [aggs, health] = await Promise.all([listBusinessAggregates(), listCurrentHealth()]);
-  const bandByBiz = new Map(health.map((h) => [h.business_id, h.band]));
-  return aggs.map((a) => toRow(a, bandByBiz.get(a.businessId) ?? null));
+export async function listCustomersPage(q: CustomersQuery = {}): Promise<CustomersPage> {
+  const pageSize = q.pageSize ?? 25;
+  const page = Math.max(1, q.page ?? 1);
+  const { data, error } = await supabase.rpc("admin_customers_page", {
+    p_search: q.search?.trim() || null,
+    p_band: q.band ?? null,
+    p_plan: q.plan ?? null,
+    p_subscription_status: q.subscriptionStatus ?? null,
+    p_industry: q.industry ?? null,
+    p_account_manager: q.accountManager ?? null,
+    p_unassigned: q.unassigned ?? false,
+    p_renewal_due: q.renewalDue ?? false,
+    p_at_risk: q.atRisk ?? false,
+    p_active: q.active ?? false,
+    p_new_this_month: q.newThisMonth ?? false,
+    p_renewal_days: 14,
+    p_sort: q.sort ?? "health",
+    p_dir: q.dir ?? "asc",
+    p_limit: pageSize,
+    p_offset: (page - 1) * pageSize,
+  });
+  if (error) throw error;
+  const raw = (data ?? []) as Row[];
+  const total = raw.length ? num(raw[0].total_count) : 0;
+  return { rows: raw.map(mapPageRow), total, page, pageSize };
 }
 
 export type TeamMember = {

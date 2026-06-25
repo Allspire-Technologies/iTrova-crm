@@ -95,6 +95,32 @@ const KPI = {
 // Current health band (cs_health_current view) — red, so the business is at risk.
 const HEALTH = { business_id: CUSTOMER.id, score: 30, band: "red", reasons: [], captured_at: CUSTOMER.created_at };
 
+// Internal staff member (candidate account manager), from admin_customers_facets / admin_list_staff.
+export const MANAGER = { id: "dddddddd-0000-0000-0000-000000000004", name: "Sade Bello" };
+
+// One row of the admin_customers_page RPC (snake_case, includes the window total_count).
+export const PAGE_ROW = {
+  business_id: CUSTOMER.id,
+  name: CUSTOMER.name,
+  industry: "Food & Beverage",
+  plan_key: "pro",
+  subscription_status: "active",
+  joined_at: CUSTOMER.created_at,
+  products_total: 12,
+  sales_count: 20,
+  total_users: 1,
+  last_login: null,
+  renewal_date: null,
+  health_score: 30,
+  health_band: "red",
+  account_manager_id: null,
+  account_manager_name: null,
+  owner_name: "Ada Obi",
+  total_count: 1,
+};
+
+const FACETS = { plans: ["pro"], industries: ["Food & Beverage"], managers: [MANAGER] };
+
 // An open churn alert (cs_alert_active view) — drives the Home at-risk list.
 const ALERT = {
   id: "cccccccc-0000-0000-0000-000000000003",
@@ -116,6 +142,11 @@ export async function stubCustomers(page: Page) {
   await page.route("**/rest/v1/rpc/admin_dashboard_kpis**", (r) => json(r, [KPI]));
   await page.route("**/rest/v1/cs_health_current**", (r) => json(r, [HEALTH]));
   await page.route("**/rest/v1/cs_alert_active**", (r) => json(r, [ALERT]));
+  // Customer Overview (§7.2): the server-side paginated page + its filter facets.
+  await page.route("**/rest/v1/rpc/admin_customers_page**", (r) => json(r, [PAGE_ROW]));
+  await page.route("**/rest/v1/rpc/admin_customers_facets**", (r) => json(r, FACETS));
+  // Bulk account-manager assignment upserts here.
+  await page.route("**/rest/v1/cs_account_assignment**", (r) => json(r, []));
   // The detail page still reads the team from profiles (admin-read RLS).
   await page.route("**/rest/v1/profiles**", (r) => json(r, [OWNER]));
 }

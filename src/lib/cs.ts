@@ -271,6 +271,20 @@ export const accountAssignment = {
     if (error) throw error;
     return data as CsAccountAssignment;
   },
+  /** Bulk-assign (or clear) the account manager for many businesses at once. */
+  async setMany(businessIds: string[], accountManagerId: string | null): Promise<void> {
+    if (businessIds.length === 0) return;
+    const assignedAt = new Date().toISOString();
+    const rows = businessIds.map((business_id) => ({
+      business_id,
+      account_manager_id: accountManagerId,
+      assigned_at: assignedAt,
+    }));
+    const { error } = await supabase
+      .from("cs_account_assignment")
+      .upsert(rows, { onConflict: "business_id" });
+    if (error) throw error;
+  },
 };
 
 export const pipeline = {
