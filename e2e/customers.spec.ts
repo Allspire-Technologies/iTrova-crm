@@ -19,8 +19,8 @@ test.describe("Customer Overview (§7.2)", () => {
     await row.click();
     await expect(page).toHaveURL(new RegExp(`/customers/${CUSTOMER.id}$`));
     await expect(page.getByRole("heading", { name: CUSTOMER.name })).toBeVisible();
-    await expect(page.getByText("Subscription")).toBeVisible();
-    await expect(page.getByText("Owner")).toBeVisible();
+    await expect(page.getByText("Profile", { exact: true })).toBeVisible();
+    await expect(page.getByText("Subscription", { exact: true })).toBeVisible();
   });
 
   test("renders the server-side table with health pill, industry and account manager", async ({ page }) => {

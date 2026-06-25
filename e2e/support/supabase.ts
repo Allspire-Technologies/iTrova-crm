@@ -93,7 +93,47 @@ const KPI = {
 };
 
 // Current health band (cs_health_current view) — red, so the business is at risk.
-const HEALTH = { business_id: CUSTOMER.id, score: 30, band: "red", reasons: [], captured_at: CUSTOMER.created_at };
+const HEALTH = {
+  business_id: CUSTOMER.id,
+  score: 30,
+  band: "red",
+  reasons: ["No login in 21 days", "No sales in 30 days"],
+  captured_at: CUSTOMER.created_at,
+};
+
+// Customer Detail (§7.4) fixtures.
+const PROFILE_EXTRA = { industry: "Food & Beverage", owner_email: "ada@mamaput.example" };
+const USAGE = {
+  products_total: 12, products_30d: 3, products_90d: 7,
+  sales_total: 20, sales_30d: 5, sales_90d: 14,
+  revenue_total: 150000, revenue_30d: 40000, revenue_90d: 110000,
+  stock_total: 5, stock_30d: 1, stock_90d: 3,
+  po_total: 4, po_30d: 1, po_90d: 2,
+  orders_total: 6, orders_30d: 2, orders_90d: 4,
+};
+const PIPELINE = { business_id: CUSTOMER.id, stage: "onboarding", stage_source: "auto", created_at: CUSTOMER.created_at, updated_at: CUSTOMER.created_at };
+const BIZ_ALERT = {
+  id: "eeeeeeee-0000-0000-0000-000000000005",
+  business_id: CUSTOMER.id,
+  kind: "churn",
+  severity: "critical",
+  detail: "No login for 21 days",
+  status: "active",
+  acknowledged_by: null,
+  created_at: CUSTOMER.created_at,
+  updated_at: CUSTOMER.created_at,
+  resolved_at: null,
+};
+const HEALTH_SNAPSHOT = {
+  id: "ffffffff-0000-0000-0000-000000000006",
+  business_id: CUSTOMER.id,
+  score: 42,
+  band: "yellow",
+  reasons: ["Recomputed now"],
+  captured_at: CUSTOMER.created_at,
+  created_at: CUSTOMER.created_at,
+  updated_at: CUSTOMER.created_at,
+};
 
 // Internal staff member (candidate account manager), from admin_customers_facets / admin_list_staff.
 export const MANAGER = { id: "dddddddd-0000-0000-0000-000000000004", name: "Sade Bello" };
@@ -147,6 +187,21 @@ export async function stubCustomers(page: Page) {
   await page.route("**/rest/v1/rpc/admin_customers_facets**", (r) => json(r, FACETS));
   // Bulk account-manager assignment upserts here.
   await page.route("**/rest/v1/cs_account_assignment**", (r) => json(r, []));
+  // Customer Detail (§7.4): profile extras, usage trends, pipeline, alerts, workflow RPCs.
+  await page.route("**/rest/v1/rpc/admin_business_profile**", (r) => json(r, [PROFILE_EXTRA]));
+  await page.route("**/rest/v1/rpc/admin_business_usage**", (r) => json(r, [USAGE]));
+  await page.route("**/rest/v1/cs_pipeline**", (r) => json(r, [PIPELINE]));
+  await page.route("**/rest/v1/cs_alert**", (r) => json(r, [BIZ_ALERT]));
+  await page.route("**/rest/v1/rpc/cs_recompute_business**", (r) => json(r, HEALTH_SNAPSHOT));
+  await page.route("**/rest/v1/rpc/cs_recompute_alerts_business**", (r) => json(r, [BIZ_ALERT]));
+  // CRM tabs: lists default empty; creates echo a row back.
+  await page.route("**/rest/v1/cs_note**", (r) =>
+    r.request().method() === "POST"
+      ? json(r, [{ id: "00000000-0000-0000-0000-0000000000a1", business_id: CUSTOMER.id, author_id: null, type: "general", body: "Logged a kickoff call", created_at: CUSTOMER.created_at, updated_at: CUSTOMER.created_at }])
+      : json(r, []),
+  );
   // The detail page still reads the team from profiles (admin-read RLS).
   await page.route("**/rest/v1/profiles**", (r) => json(r, [OWNER]));
 }
+
+export { BIZ_ALERT, PROFILE_EXTRA };

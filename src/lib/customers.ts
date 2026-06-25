@@ -1,5 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
-import { getBusinessAggregate, type SubscriptionStatus } from "@/lib/admin";
+import { getBusinessAggregate, getBusinessProfileExtra, type SubscriptionStatus } from "@/lib/admin";
 import type { HealthBand } from "@/lib/cs";
 
 export type { SubscriptionStatus };
@@ -160,6 +160,8 @@ export type CustomerDetail = {
   name: string;
   currency: string;
   planKey: string | null;
+  industry: string | null;
+  ownerEmail: string | null;
   timezone: string | null;
   whatsappNumber: string | null;
   ownerId: string;
@@ -173,11 +175,14 @@ export async function getCustomer(id: string): Promise<CustomerDetail | null> {
   const agg = await getBusinessAggregate(id);
   if (!agg) return null;
 
-  const { data: team, error } = await supabase
-    .from("profiles")
-    .select("id, owner_name, phone, last_seen")
-    .eq("business_id", id)
-    .order("created_at", { ascending: true });
+  const [{ data: team, error }, extra] = await Promise.all([
+    supabase
+      .from("profiles")
+      .select("id, owner_name, phone, last_seen")
+      .eq("business_id", id)
+      .order("created_at", { ascending: true }),
+    getBusinessProfileExtra(id).catch(() => ({ industry: null, ownerEmail: null })),
+  ]);
   if (error) throw error;
 
   return {
@@ -185,6 +190,8 @@ export async function getCustomer(id: string): Promise<CustomerDetail | null> {
     name: agg.name,
     currency: agg.currency,
     planKey: agg.planKey,
+    industry: extra.industry,
+    ownerEmail: extra.ownerEmail,
     timezone: agg.timezone,
     whatsappNumber: agg.whatsappNumber,
     ownerId: agg.ownerId,
