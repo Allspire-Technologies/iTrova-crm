@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import type { HealthBand, PipelineStage } from "@/lib/cs";
 
 // Typed access to the secure aggregate layer. Every call goes through a SECURITY DEFINER
 // RPC that verifies the caller is a platform admin before returning cross-tenant data
@@ -126,6 +127,33 @@ export type CustomersFacets = {
   industries: string[];
   managers: StaffMember[];
 };
+
+// Customer Success Pipeline board (PRD §7.6) — one card per business. From admin_pipeline_board().
+export type PipelineCard = {
+  businessId: string;
+  name: string;
+  stage: PipelineStage;
+  stageSource: "auto" | "manual";
+  healthBand: HealthBand | null;
+  healthScore: number | null;
+  renewalDate: string | null;
+  accountManagerName: string | null;
+};
+
+export async function getPipelineBoard(): Promise<PipelineCard[]> {
+  const { data, error } = await supabase.rpc("admin_pipeline_board");
+  if (error) throw error;
+  return ((data ?? []) as Row[]).map((r) => ({
+    businessId: String(r.business_id),
+    name: String(r.name),
+    stage: str(r.stage) as PipelineStage,
+    stageSource: (str(r.stage_source) as "auto" | "manual") ?? "auto",
+    healthBand: str(r.health_band) as HealthBand | null,
+    healthScore: r.health_score == null ? null : num(r.health_score),
+    renewalDate: str(r.renewal_date),
+    accountManagerName: str(r.account_manager_name),
+  }));
+}
 
 // Profile extras the aggregate doesn't carry (industry + owner email), for the detail page.
 export type BusinessProfileExtra = { industry: string | null; ownerEmail: string | null };
