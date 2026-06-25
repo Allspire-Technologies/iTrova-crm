@@ -92,10 +92,30 @@ const KPI = {
   total_products: 12,
 };
 
+// Current health band (cs_health_current view) — red, so the business is at risk.
+const HEALTH = { business_id: CUSTOMER.id, score: 30, band: "red", reasons: [], captured_at: CUSTOMER.created_at };
+
+// An open churn alert (cs_alert_active view) — drives the Home at-risk list.
+const ALERT = {
+  id: "cccccccc-0000-0000-0000-000000000003",
+  business_id: CUSTOMER.id,
+  business_name: CUSTOMER.name,
+  kind: "churn",
+  severity: "critical",
+  detail: "no login for 30 days",
+  status: "active",
+  acknowledged_by: null,
+  created_at: CUSTOMER.created_at,
+  updated_at: CUSTOMER.created_at,
+  resolved_at: null,
+};
+
 export async function stubCustomers(page: Page) {
   // Both the table (no arg) and the detail (p_business_id) hit the same RPC.
   await page.route("**/rest/v1/rpc/admin_business_aggregates**", (r) => json(r, [AGG]));
   await page.route("**/rest/v1/rpc/admin_dashboard_kpis**", (r) => json(r, [KPI]));
+  await page.route("**/rest/v1/cs_health_current**", (r) => json(r, [HEALTH]));
+  await page.route("**/rest/v1/cs_alert_active**", (r) => json(r, [ALERT]));
   // The detail page still reads the team from profiles (admin-read RLS).
   await page.route("**/rest/v1/profiles**", (r) => json(r, [OWNER]));
 }

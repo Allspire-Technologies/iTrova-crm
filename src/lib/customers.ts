@@ -5,6 +5,8 @@ import {
   type BusinessAggregate,
   type SubscriptionStatus,
 } from "@/lib/admin";
+import { listCurrentHealth } from "@/lib/health";
+import type { HealthBand } from "@/lib/cs";
 
 export type { SubscriptionStatus };
 
@@ -24,9 +26,12 @@ export type CustomerRow = {
   salesCount: number;
   revenueRecorded: number;
   createdAt: string;
+  renewalDate: string | null;
+  lastLogin: string | null;
+  band: HealthBand | null;
 };
 
-function toRow(a: BusinessAggregate): CustomerRow {
+function toRow(a: BusinessAggregate, band: HealthBand | null): CustomerRow {
   return {
     id: a.businessId,
     name: a.name,
@@ -39,12 +44,16 @@ function toRow(a: BusinessAggregate): CustomerRow {
     salesCount: a.salesCount,
     revenueRecorded: a.revenueRecorded,
     createdAt: a.joinedAt,
+    renewalDate: a.renewalDate,
+    lastLogin: a.lastLogin,
+    band,
   };
 }
 
 export async function listCustomers(): Promise<CustomerRow[]> {
-  const aggs = await listBusinessAggregates();
-  return aggs.map(toRow);
+  const [aggs, health] = await Promise.all([listBusinessAggregates(), listCurrentHealth()]);
+  const bandByBiz = new Map(health.map((h) => [h.business_id, h.band]));
+  return aggs.map((a) => toRow(a, bandByBiz.get(a.businessId) ?? null));
 }
 
 export type TeamMember = {
