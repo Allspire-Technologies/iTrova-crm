@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { SlidersHorizontal, Users, ShieldCheck, Lock } from "lucide-react";
+import { SlidersHorizontal, Users, ShieldCheck, Lock, UserPlus, Copy, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/PageHeader";
 import { LoadingState } from "@/components/states/LoadingState";
@@ -7,13 +7,14 @@ import { ErrorState } from "@/components/states/ErrorState";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useAuth } from "@/contexts/AuthContext";
 import { getHealthSettings, updateHealthSettings, type HealthSettings, type HealthSettingsUpdate } from "@/lib/health";
 import { listCustomersPage, type CustomerPageRow } from "@/lib/customers";
 import { getCustomersFacets, type CustomersFacets } from "@/lib/admin";
 import { accountAssignment } from "@/lib/cs";
-import { listStaffRoles, setStaffRole, STAFF_ROLE_LABELS, STAFF_ROLES, type StaffRole, type StaffWithRole } from "@/lib/roles";
+import { listStaffRoles, setStaffRole, inviteStaff, removeStaff, STAFF_ROLE_LABELS, STAFF_ROLES, type StaffRole, type StaffWithRole } from "@/lib/roles";
 
 const selectClass =
   "h-9 rounded-md border border-input bg-background px-2 text-sm text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60";
@@ -270,10 +271,67 @@ function AssignmentCard({ canEdit }: { canEdit: boolean }) {
   );
 }
 
+function InviteStaff({ onInvited }: { onInvited?: () => void }) {
+  const [email, setEmail] = useState("");
+  const [role, setRole] = useState<StaffRole>("support");
+  const [busy, setBusy] = useState(false);
+  const [link, setLink] = useState<string | null>(null);
+
+  async function generate() {
+    if (!email.trim()) return;
+    setBusy(true);
+    try {
+      setLink(await inviteStaff(email.trim(), role));
+      toast.success("Invite link created — copy it to the new staff member.");
+      onInvited?.();
+    } catch (e) {
+      toast.error((e as { message?: string })?.message ?? "Couldn't create the invite.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function copy() {
+    if (!link) return;
+    try {
+      await navigator.clipboard.writeText(link);
+      toast.success("Link copied.");
+    } catch {
+      toast.error("Couldn't copy — select the link and copy manually.");
+    }
+  }
+
+  return (
+    <div className="space-y-3 rounded-lg border border-border/60 bg-secondary/30 p-3">
+      <div className="flex items-center gap-2 text-sm font-medium text-brand-dark"><UserPlus className="size-4" /> Invite a staff member</div>
+      <div className="flex flex-wrap items-center gap-2">
+        <Input type="email" className="min-w-[200px] flex-1" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="newperson@allspire.tech" aria-label="New staff email" />
+        <select className={selectClass} value={role} onChange={(e) => setRole(e.target.value as StaffRole)} aria-label="New staff role">
+          {STAFF_ROLES.map((r) => (
+            <option key={r} value={r}>{STAFF_ROLE_LABELS[r]}</option>
+          ))}
+        </select>
+        <Button size="sm" onClick={generate} disabled={busy || !email.trim()}>{busy ? "Creating…" : "Generate invite link"}</Button>
+      </div>
+      {link && (
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <Input readOnly value={link} aria-label="Invite link" onFocus={(e) => e.currentTarget.select()} className="flex-1 font-mono text-xs" />
+            <Button size="sm" variant="outline" onClick={copy}><Copy className="size-4" /> Copy</Button>
+          </div>
+          <p className="text-xs text-muted-foreground">Send this link to {email}. They’ll set their name &amp; password, then they’re in.</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function RolesCard({ isAdmin }: { isAdmin: boolean }) {
+  const currentUserId = useAuth().user?.id;
   const [staff, setStaff] = useState<StaffWithRole[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  const [actingOn, setActingOn] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -299,6 +357,34 @@ function RolesCard({ isAdmin }: { isAdmin: boolean }) {
     }
   }
 
+  async function copyInvite(s: StaffWithRole) {
+    if (!s.email) return;
+    setActingOn(s.userId);
+    try {
+      const link = await inviteStaff(s.email, s.role);
+      await navigator.clipboard.writeText(link).catch(() => undefined);
+      toast.success("Fresh invite link copied — send it to them.");
+    } catch (e) {
+      toast.error((e as { message?: string })?.message ?? "Couldn't create the invite link.");
+    } finally {
+      setActingOn(null);
+    }
+  }
+
+  async function remove(s: StaffWithRole) {
+    if (!window.confirm(`Remove ${s.name ?? s.email} from Admin OS? They’ll lose access immediately.`)) return;
+    setActingOn(s.userId);
+    try {
+      await removeStaff(s.userId);
+      setStaff((list) => (list ?? []).filter((x) => x.userId !== s.userId));
+      toast.success(`${s.name ?? s.email} removed.`);
+    } catch (e) {
+      toast.error((e as { message?: string })?.message ?? "Couldn't remove this member.");
+    } finally {
+      setActingOn(null);
+    }
+  }
+
   return (
     <Card>
       <CardHeader>
@@ -306,8 +392,10 @@ function RolesCard({ isAdmin }: { isAdmin: boolean }) {
       </CardHeader>
       <CardContent className="space-y-4">
         <p className="text-sm text-muted-foreground">
-          {isAdmin ? "Assign each internal user a role." : "Your access is set by your role."} Only Management/Admin can change roles.
+          {isAdmin ? "Invite new staff and assign each internal user a role." : "Your access is set by your role."} Only Management/Admin can change roles.
         </p>
+
+        {isAdmin && <InviteStaff onInvited={() => setReloadKey((k) => k + 1)} />}
 
         {error ? (
           <ErrorState message={error} onRetry={() => setReloadKey((k) => k + 1)} />
@@ -321,12 +409,16 @@ function RolesCard({ isAdmin }: { isAdmin: boolean }) {
                   <TableHead>Member</TableHead>
                   <TableHead>Email</TableHead>
                   <TableHead>Role</TableHead>
+                  {isAdmin && <TableHead className="text-right">Actions</TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {staff.map((s) => (
                   <TableRow key={s.userId} className="hover:bg-transparent">
-                    <TableCell className="font-medium text-brand-dark">{s.name ?? "—"}</TableCell>
+                    <TableCell className="font-medium text-brand-dark">
+                      {s.name ?? "—"}
+                      {s.pending && <Badge variant="secondary" className="ml-2 align-middle">Pending</Badge>}
+                    </TableCell>
                     <TableCell className="text-muted-foreground">{s.email ?? "—"}</TableCell>
                     <TableCell>
                       {isAdmin ? (
@@ -344,6 +436,22 @@ function RolesCard({ isAdmin }: { isAdmin: boolean }) {
                         <span className="text-muted-foreground">{STAFF_ROLE_LABELS[s.role]}</span>
                       )}
                     </TableCell>
+                    {isAdmin && (
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-2">
+                          {s.pending && (
+                            <Button size="sm" variant="outline" disabled={actingOn === s.userId} onClick={() => copyInvite(s)} aria-label={`Copy invite link for ${s.email}`}>
+                              <Copy className="size-3.5" /> Copy link
+                            </Button>
+                          )}
+                          {s.userId !== currentUserId && (
+                            <Button size="sm" variant="ghost" disabled={actingOn === s.userId} onClick={() => remove(s)} className="text-destructive hover:text-destructive" aria-label={`Remove ${s.name ?? s.email}`}>
+                              <Trash2 className="size-3.5" /> Remove
+                            </Button>
+                          )}
+                        </div>
+                      </TableCell>
+                    )}
                   </TableRow>
                 ))}
               </TableBody>

@@ -201,7 +201,7 @@ export const SETTINGS = {
   updated_at: CUSTOMER.created_at,
 };
 
-export const STAFF_ROLE_ROW = { user_id: MANAGER.id, name: MANAGER.name, email: "sade@allspire.tech", role: "support" };
+export const STAFF_ROLE_ROW = { user_id: MANAGER.id, name: MANAGER.name, email: "sade@allspire.tech", role: "support", pending: true };
 
 export async function stubSettings(page: Page) {
   await page.route("**/rest/v1/cs_settings**", (r) => json(r, SETTINGS));
@@ -209,6 +209,8 @@ export async function stubSettings(page: Page) {
   await page.route("**/rest/v1/rpc/admin_customers_facets**", (r) => json(r, FACETS));
   await page.route("**/rest/v1/rpc/admin_list_staff_roles**", (r) => json(r, [STAFF_ROLE_ROW]));
   await page.route("**/rest/v1/cs_staff_role**", (r) => json(r, [{ ...STAFF_ROLE_ROW, role: "cso" }]));
+  await page.route("**/rest/v1/rpc/admin_remove_staff**", (r) => json(r, null));
+  await page.route("**/functions/v1/invite-staff**", (r) => json(r, { token_hash: "tok_abc123", type: "invite", email: "newbie@allspire.tech" }));
   await page.route("**/rest/v1/cs_account_assignment**", (r) =>
     json(r, { business_id: CUSTOMER.id, account_manager_id: MANAGER.id, assigned_at: CUSTOMER.created_at, created_at: CUSTOMER.created_at, updated_at: CUSTOMER.created_at }),
   );

@@ -51,6 +51,39 @@ test.describe("Settings (§3/§8)", () => {
     await write;
   });
 
+  test("admin can generate a staff invite link", async ({ page }) => {
+    await signIn(page, { staff: true });
+    await stubSettings(page);
+    await page.goto("/settings");
+
+    await page.getByLabel("New staff email").fill("newbie@allspire.tech");
+    await page.getByLabel("New staff role").selectOption("support");
+    await page.getByRole("button", { name: "Generate invite link" }).click();
+    await expect(page.getByLabel("Invite link")).toHaveValue(/set-password/);
+  });
+
+  test("admin can copy a fresh link for a pending invite", async ({ page }) => {
+    await signIn(page, { staff: true });
+    await stubSettings(page);
+    await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+    await page.goto("/settings");
+
+    const req = page.waitForRequest((r) => r.url().includes("/functions/v1/invite-staff"));
+    await page.getByRole("button", { name: "Copy invite link for sade@allspire.tech" }).click();
+    await req;
+  });
+
+  test("admin can remove a staff member (writes admin_remove_staff)", async ({ page }) => {
+    await signIn(page, { staff: true });
+    await stubSettings(page);
+    await page.goto("/settings");
+
+    page.on("dialog", (d) => d.accept()); // confirm prompt
+    const req = page.waitForRequest((r) => r.url().includes("/rest/v1/rpc/admin_remove_staff"));
+    await page.getByRole("button", { name: `Remove ${MANAGER.name}` }).click();
+    await req;
+  });
+
   test("a non-admin (CSO) sees settings read-only", async ({ page }) => {
     await signIn(page, { staff: true, role: "cso" });
     await stubSettings(page);
@@ -59,5 +92,6 @@ test.describe("Settings (§3/§8)", () => {
     await expect(page.getByText("Only Management/Admin can change thresholds")).toBeVisible();
     await expect(page.getByRole("button", { name: "Save thresholds" })).toHaveCount(0);
     await expect(page.getByLabel(`Role for ${MANAGER.name}`)).toHaveCount(0); // read-only, no select
+    await expect(page.getByLabel("New staff email")).toHaveCount(0); // no invite form for non-admin
   });
 });
