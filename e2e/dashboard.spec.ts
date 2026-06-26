@@ -21,6 +21,17 @@ test.describe("Dashboard", () => {
     await expect(page.getByText(CUSTOMER.name)).toBeVisible();
   });
 
+  test("a non-admin (support) sees neither MRR/ARR nor 'all' framing", async ({ page }) => {
+    await signIn(page, { staff: true, role: "support" });
+    await stubCustomers(page);
+    await page.goto("/");
+
+    await expect(page.getByText("Total Businesses")).toBeVisible();
+    await expect(page.getByText("MRR", { exact: true })).toHaveCount(0); // revenue is admin-only
+    await expect(page.getByText("ARR", { exact: true })).toHaveCount(0);
+    await expect(page.getByText("Overview of your assigned customers.")).toBeVisible();
+  });
+
   test("a KPI card click-through lands on a filtered Customers view", async ({ page }) => {
     await signIn(page, { staff: true });
     await stubCustomers(page);

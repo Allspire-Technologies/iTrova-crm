@@ -20,9 +20,14 @@ import { Badge } from "@/components/ui/badge";
 import { Sparkline } from "@/components/charts/Charts";
 import { getHomeData, type HomeData } from "@/lib/home";
 import { getHealthTrend, type HealthTrendPoint } from "@/lib/admin";
+import { useAuth } from "@/contexts/AuthContext";
+import { roleSeesRevenue, roleSeesAll } from "@/lib/roles";
 import { formatDate, formatMoney } from "@/lib/format";
 
 export default function Home() {
+  const { role } = useAuth();
+  const seesRevenue = roleSeesRevenue(role); // MRR/ARR are Management/Admin-only (§3)
+  const seesAll = roleSeesAll(role);
   const [data, setData] = useState<HomeData | null>(null);
   const [trend, setTrend] = useState<HealthTrendPoint[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -58,7 +63,7 @@ export default function Home() {
 
   return (
     <>
-      <PageHeader title="Dashboard" subtitle="Overview of all iTrova businesses." />
+      <PageHeader title="Dashboard" subtitle={seesAll ? "Overview of all iTrova businesses." : "Overview of your assigned customers."} />
 
       {error ? (
         <ErrorState message={error} onRetry={() => setReloadKey((k) => k + 1)} />
@@ -71,8 +76,12 @@ export default function Home() {
             <StatCard label="Active Businesses" value={String(data.kpis.activeBusinesses)} hint="≥1 login in 30 days" icon={Activity} to="/customers?filter=active" />
             <StatCard label="Trial Businesses" value={String(data.kpis.trialBusinesses)} icon={FlaskConical} to="/customers?filter=trial" />
             <StatCard label="Paying Businesses" value={String(data.kpis.payingBusinesses)} icon={BadgeCheck} to="/customers?filter=paying" />
-            <StatCard label="MRR" value={formatMoney(data.kpis.mrr, data.kpis.currency)} hint="Monthly-normalised" icon={Banknote} to="/customers?filter=paying" />
-            <StatCard label="ARR" value={formatMoney(data.kpis.arr, data.kpis.currency)} hint="MRR × 12" icon={TrendingUp} to="/customers?filter=paying" />
+            {seesRevenue && (
+              <StatCard label="MRR" value={formatMoney(data.kpis.mrr, data.kpis.currency)} hint="Monthly-normalised" icon={Banknote} to="/customers?filter=paying" />
+            )}
+            {seesRevenue && (
+              <StatCard label="ARR" value={formatMoney(data.kpis.arr, data.kpis.currency)} hint="MRR × 12" icon={TrendingUp} to="/customers?filter=paying" />
+            )}
             <StatCard label="Businesses At Risk" value={String(data.kpis.atRisk)} hint="Red band or churn/renewal alert" icon={AlertTriangle} to="/customers?filter=at_risk" />
             <StatCard label="Due For Renewal" value={String(data.kpis.dueRenewal)} hint="Next 14 days" icon={CalendarClock} to="/customers?filter=renewal_due" />
             <StatCard label="New This Month" value={String(data.kpis.newThisMonth)} icon={Sparkles} to="/customers?filter=new_this_month" />

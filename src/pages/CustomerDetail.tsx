@@ -19,6 +19,8 @@ import { getCustomer, type CustomerDetail as Detail } from "@/lib/customers";
 import { getCurrentHealth, listHealthHistory } from "@/lib/health";
 import { pipeline } from "@/lib/cs";
 import type { CsPipeline, HealthBand, PipelineStage } from "@/lib/cs";
+import { useAuth } from "@/contexts/AuthContext";
+import { roleSeesRevenue } from "@/lib/roles";
 import { formatDate, formatMoney, formatRelative } from "@/lib/format";
 
 const CrmTabs = lazy(() => import("@/components/customer/CrmTabs"));
@@ -63,6 +65,7 @@ function SectionHeading({ children }: { children: React.ReactNode }) {
 
 export default function CustomerDetail() {
   const { id } = useParams();
+  const seesRevenue = roleSeesRevenue(useAuth().role); // subscription amount / revenue are admin-only (§3)
   const [data, setData] = useState<Detail | null | undefined>(undefined);
   const [health, setHealth] = useState<Health>(null);
   const [stage, setStage] = useState<CsPipeline | null>(null);
@@ -195,7 +198,7 @@ export default function CustomerDetail() {
           </CardHeader>
           <CardContent>
             <dl className="grid grid-cols-2 gap-x-4 gap-y-5">
-              <Field label="Amount">{sub ? formatMoney(sub.amount, sub.currency) : "—"}</Field>
+              {seesRevenue && <Field label="Amount">{sub ? formatMoney(sub.amount, sub.currency) : "—"}</Field>}
               <Field label="Cycle"><span className="capitalize">{sub?.cycle ?? "—"}</span></Field>
               <Field label="Started">{formatDate(sub?.startedAt)}</Field>
               <Field label="Currency">{data.currency}</Field>

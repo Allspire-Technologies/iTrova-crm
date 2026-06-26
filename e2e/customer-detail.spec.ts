@@ -21,6 +21,15 @@ test.describe("Customer Detail (§7.4)", () => {
     await expect(page.getByText("Health trend")).toBeVisible(); // sparkline from snapshot history
   });
 
+  test("a non-admin (support) does not see the subscription amount", async ({ page }) => {
+    await signIn(page, { staff: true, role: "support" });
+    await stubCustomers(page);
+    await page.goto(`/customers/${CUSTOMER.id}`);
+
+    await expect(page.getByText("Subscription", { exact: true })).toBeVisible();
+    await expect(page.getByText("Amount", { exact: true })).toHaveCount(0); // revenue is admin-only
+  });
+
   test("recompute health calls the staff-gated RPC", async ({ page }) => {
     await signIn(page, { staff: true });
     await stubCustomers(page);

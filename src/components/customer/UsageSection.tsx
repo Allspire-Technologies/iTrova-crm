@@ -4,6 +4,8 @@ import { LoadingState } from "@/components/states/LoadingState";
 import { ErrorState } from "@/components/states/ErrorState";
 import { MiniBars } from "@/components/charts/Charts";
 import { getBusinessUsage, type BusinessUsage, type UsageMetric } from "@/lib/admin";
+import { useAuth } from "@/contexts/AuthContext";
+import { roleSeesRevenue } from "@/lib/roles";
 import { formatMoney } from "@/lib/format";
 
 function Tile({
@@ -53,6 +55,7 @@ function Tile({
 }
 
 export function UsageSection({ businessId, currency }: { businessId: string; currency: string }) {
+  const seesRevenue = roleSeesRevenue(useAuth().role);
   const [usage, setUsage] = useState<BusinessUsage | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
@@ -79,13 +82,15 @@ export function UsageSection({ businessId, currency }: { businessId: string; cur
       <Tile label="Stock Movements" total={String(usage.stock.total)} metric={usage.stock} />
       <Tile label="Purchase Orders" total={String(usage.purchaseOrders.total)} metric={usage.purchaseOrders} />
       <Tile label="Sales Transactions" total={String(usage.sales.total)} metric={usage.sales} />
-      <Tile
-        label="Revenue Recorded"
-        total={formatMoney(usage.revenue.total, currency)}
-        metric={usage.revenue}
-        money
-        currency={currency}
-      />
+      {seesRevenue && (
+        <Tile
+          label="Revenue Recorded"
+          total={formatMoney(usage.revenue.total, currency)}
+          metric={usage.revenue}
+          money
+          currency={currency}
+        />
+      )}
     </div>
   );
 }
