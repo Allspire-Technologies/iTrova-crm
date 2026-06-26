@@ -28,13 +28,15 @@ function json(route: Route, body: unknown, status = 200) {
  * Stub the Supabase Auth + the is_platform_admin RPC so the staff gate can be exercised
  * deterministically. `staff` decides what is_platform_admin() returns.
  */
-export async function stubAuth(page: Page, opts: { staff: boolean }) {
+export async function stubAuth(page: Page, opts: { staff: boolean; role?: string }) {
   await page.route("**/auth/v1/token**", (r) => json(r, SESSION_BODY));
   await page.route("**/auth/v1/user**", (r) => json(r, FAKE_USER));
   // Safety net for any other PostgREST call — registered FIRST so the specific RPC
-  // route below (registered last) wins for is_platform_admin (Playwright = last match wins).
+  // routes below (registered last) win (Playwright = last match wins).
   await page.route("**/rest/v1/**", (r) => json(r, []));
   await page.route("**/rest/v1/rpc/is_platform_admin**", (r) => json(r, opts.staff));
+  // The staff role (PRD §3). Defaults to admin so existing tests keep full access.
+  await page.route("**/rest/v1/rpc/cs_my_role**", (r) => json(r, opts.staff ? opts.role ?? "admin" : null));
 }
 
 // One business with an owner and an active subscription, used to drive the Customers
@@ -199,10 +201,14 @@ export const SETTINGS = {
   updated_at: CUSTOMER.created_at,
 };
 
+export const STAFF_ROLE_ROW = { user_id: MANAGER.id, name: MANAGER.name, email: "sade@allspire.tech", role: "support" };
+
 export async function stubSettings(page: Page) {
   await page.route("**/rest/v1/cs_settings**", (r) => json(r, SETTINGS));
   await page.route("**/rest/v1/rpc/admin_customers_page**", (r) => json(r, [PAGE_ROW]));
   await page.route("**/rest/v1/rpc/admin_customers_facets**", (r) => json(r, FACETS));
+  await page.route("**/rest/v1/rpc/admin_list_staff_roles**", (r) => json(r, [STAFF_ROLE_ROW]));
+  await page.route("**/rest/v1/cs_staff_role**", (r) => json(r, [{ ...STAFF_ROLE_ROW, role: "cso" }]));
   await page.route("**/rest/v1/cs_account_assignment**", (r) =>
     json(r, { business_id: CUSTOMER.id, account_manager_id: MANAGER.id, assigned_at: CUSTOMER.created_at, created_at: CUSTOMER.created_at, updated_at: CUSTOMER.created_at }),
   );
