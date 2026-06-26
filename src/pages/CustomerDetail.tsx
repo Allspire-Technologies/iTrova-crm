@@ -8,7 +8,6 @@ import { ErrorState } from "@/components/states/ErrorState";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { SubscriptionBadge, PlanBadge } from "@/components/SubscriptionBadge";
 import { HealthBadge } from "@/components/HealthBadge";
 import { StatCard } from "@/components/StatCard";
@@ -51,9 +50,9 @@ function reasonList(reasons: unknown): string[] {
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div>
+    <div className="min-w-0">
       <dt className="text-xs uppercase tracking-wide text-muted-foreground">{label}</dt>
-      <dd className="mt-0.5 text-sm font-medium text-brand-dark">{children}</dd>
+      <dd className="mt-0.5 break-words text-sm font-medium text-brand-dark">{children}</dd>
     </div>
   );
 }
@@ -146,15 +145,15 @@ export default function CustomerDetail() {
       {/* Profile + Subscription */}
       <div className="grid gap-6 lg:grid-cols-3">
         <Card className="lg:col-span-2">
-          <CardHeader className="flex-row items-center justify-between space-y-0">
+          <CardHeader className="flex-row flex-wrap items-center justify-between gap-2 space-y-0">
             <CardTitle>Profile</CardTitle>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <HealthBadge band={health?.band ?? null} score={health?.score ?? null} />
               {stage && <Badge variant="secondary">{STAGE_LABELS[stage.stage]}</Badge>}
             </div>
           </CardHeader>
           <CardContent>
-            <dl className="grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-3">
+            <dl className="grid grid-cols-1 gap-x-6 gap-y-5 sm:grid-cols-2 lg:grid-cols-3">
               <Field label="Business">{data.name}</Field>
               <Field label="Owner">{owner?.name ?? "—"}</Field>
               <Field label="Phone">{owner?.phone ?? data.whatsappNumber ?? "—"}</Field>
@@ -171,6 +170,7 @@ export default function CustomerDetail() {
                   values={scores}
                   width={180}
                   height={36}
+                  className="w-40 shrink-0"
                   ariaLabel={`Health score over the last ${scores.length} snapshots, currently ${scores[scores.length - 1]}`}
                 />
               </div>
@@ -189,12 +189,12 @@ export default function CustomerDetail() {
         </Card>
 
         <Card>
-          <CardHeader className="flex-row items-center justify-between space-y-0">
+          <CardHeader className="flex-row flex-wrap items-center justify-between gap-2 space-y-0">
             <CardTitle>Subscription</CardTitle>
             <SubscriptionBadge status={sub?.status ?? null} />
           </CardHeader>
           <CardContent>
-            <dl className="grid grid-cols-2 gap-y-5">
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-5">
               <Field label="Amount">{sub ? formatMoney(sub.amount, sub.currency) : "—"}</Field>
               <Field label="Cycle"><span className="capitalize">{sub?.cycle ?? "—"}</span></Field>
               <Field label="Started">{formatDate(sub?.startedAt)}</Field>
@@ -237,28 +237,20 @@ export default function CustomerDetail() {
           {data.team.length === 0 ? (
             <p className="px-6 pb-6 text-sm text-muted-foreground">No team members.</p>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow className="hover:bg-transparent">
-                  <TableHead>Name</TableHead>
-                  <TableHead>Role</TableHead>
-                  <TableHead>Phone</TableHead>
-                  <TableHead>Last active</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {data.team.map((m) => (
-                  <TableRow key={m.id} className="hover:bg-transparent">
-                    <TableCell className="font-medium text-brand-dark">{m.name ?? "—"}</TableCell>
-                    <TableCell>
-                      {m.isOwner ? <Badge variant="secondary">Owner</Badge> : <span className="text-muted-foreground">Member</span>}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">{m.phone ?? "—"}</TableCell>
-                    <TableCell className="text-muted-foreground">{formatRelative(m.lastSeen)}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <ul className="divide-y divide-border/60">
+              {data.team.map((m) => (
+                <li key={m.id} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 px-6 py-3">
+                  <div className="min-w-0">
+                    <div className="truncate font-medium text-brand-dark">{m.name ?? "—"}</div>
+                    <div className="truncate text-xs text-muted-foreground">{m.phone ?? "—"}</div>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-3">
+                    {m.isOwner ? <Badge variant="secondary">Owner</Badge> : <span className="text-xs text-muted-foreground">Member</span>}
+                    <span className="text-xs text-muted-foreground">{formatRelative(m.lastSeen)}</span>
+                  </div>
+                </li>
+              ))}
+            </ul>
           )}
         </CardContent>
       </Card>
