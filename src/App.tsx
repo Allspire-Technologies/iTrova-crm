@@ -4,6 +4,7 @@ import { StaffGate } from "@/components/StaffGate";
 import AppShell from "@/components/AppShell";
 import Login from "@/pages/Login";
 import NoAccess from "@/pages/NoAccess";
+import SetPassword from "@/pages/SetPassword";
 import Home from "@/pages/Home";
 import Customers from "@/pages/Customers";
 import CustomerDetail from "@/pages/CustomerDetail";
@@ -20,6 +21,7 @@ export default function App() {
           {/* Public / pre-gate */}
           <Route path="/login" element={<Login />} />
           <Route path="/no-access" element={<NoAccess />} />
+          <Route path="/set-password" element={<SetPassword />} />
 
           {/* Staff-only Admin OS */}
           <Route

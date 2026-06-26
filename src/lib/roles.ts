@@ -39,7 +39,7 @@ export async function getMyRole(): Promise<StaffRole | null> {
   return (data as StaffRole | null) ?? null;
 }
 
-export type StaffWithRole = { userId: string; name: string | null; email: string | null; role: StaffRole };
+export type StaffWithRole = { userId: string; name: string | null; email: string | null; role: StaffRole; pending: boolean };
 
 export async function listStaffRoles(): Promise<StaffWithRole[]> {
   const { data, error } = await supabase.rpc("admin_list_staff_roles");
@@ -49,10 +49,46 @@ export async function listStaffRoles(): Promise<StaffWithRole[]> {
     name: r.name == null ? null : String(r.name),
     email: r.email == null ? null : String(r.email),
     role: String(r.role) as StaffRole,
+    pending: r.pending === true,
   }));
 }
 
 export async function setStaffRole(userId: string, role: StaffRole): Promise<void> {
   const { error } = await supabase.from("cs_staff_role").upsert({ user_id: userId, role }, { onConflict: "user_id" });
   if (error) throw error;
+}
+
+/** Revoke a staff member's Admin OS access (admin only; can't remove yourself). */
+export async function removeStaff(userId: string): Promise<void> {
+  const { error } = await supabase.rpc("admin_remove_staff", { p_user_id: userId });
+  if (error) throw error;
+}
+
+/** Generate a staff invite link (admin only). The admin copies it to the new staff member, who
+ *  opens it and sets their name + password on /set-password. The Edge Function (service-role,
+ *  server-side) returns a token; we build the link on OUR domain so the URL never shows Supabase. */
+export async function inviteStaff(email: string, role: StaffRole): Promise<string> {
+  const { data, error } = await supabase.functions.invoke<{ token_hash?: string; type?: string; error?: string }>(
+    "invite-staff",
+    { body: { email: email.trim(), role } },
+  );
+  if (error) {
+    // Function unreachable (not deployed / not served locally).
+    if ((error as { name?: string }).name === "FunctionsFetchError" || /failed to send a request/i.test(error.message)) {
+      throw new Error("Couldn't reach the invite function — deploy it: supabase functions deploy invite-staff");
+    }
+    // Otherwise surface the function's JSON error body if present.
+    let message = error.message;
+    try {
+      const body = await (error as { context?: Response }).context?.json();
+      if (body?.error) message = body.error;
+    } catch {
+      /* fall back to error.message */
+    }
+    throw new Error(message);
+  }
+  if (data?.error) throw new Error(data.error);
+  if (!data?.token_hash) throw new Error("No invite token was returned.");
+  const params = new URLSearchParams({ token_hash: data.token_hash, type: data.type ?? "invite" });
+  return `${window.location.origin}/set-password?${params.toString()}`;
 }

@@ -73,6 +73,8 @@ supabase db push
 | 13 | `..210000_cs_pipeline_rules_align` | pure, testable `cs_pipeline_stage()` per §7.6 |
 | 14 | `..220000_cs_task_assignee_role` | `cs_task.assignee_role` + `cs_task_admin` view |
 | 15 | `..230000_admin_health_trend` | `admin_health_trend()` for the Home chart |
+| 16 | `..240000_staff_roles` | `cs_staff_role` + capability helpers + role-aware `cs_*` RLS (§3) |
+| 17 | `..250000_role_scoped_reads` | role-scope the read RPCs (Support → assigned) + gate revenue |
 
 ### Seed the first internal admin
 
@@ -85,7 +87,19 @@ select id from auth.users where email = 'you@allspire.tech'
 on conflict do nothing;
 ```
 
-To add more staff later, repeat with their email. To revoke, delete their row.
+New users seeded this way default to the **admin** role; change it in **Settings → Roles**. To revoke access, delete their `platform_admins` row.
+
+### Adding more staff (in-app invites)
+
+Once the first admin exists, staff are added from **Settings → Roles → Invite a staff member** — no SQL. It generates a link the admin copies and sends; the invitee opens it, sets their name + password on `/set-password`, and they're in with the chosen role. This needs the invite Edge Function and one Auth setting:
+
+```bash
+supabase functions deploy invite-staff      # holds the service-role key server-side
+```
+
+- The function uses the auto-provided `SUPABASE_URL` / `SUPABASE_ANON_KEY` / `SUPABASE_SERVICE_ROLE_KEY` — nothing extra to configure.
+- Add your app's `…/set-password` to **Auth → URL Configuration → Redirect URLs** so the invite link is allowed to land there.
+- No email/SMTP is required (the link is generated and copied, not emailed). If you later want it auto-emailed, switch the function from `generateLink` to `inviteUserByEmail` and configure SMTP.
 
 ### Verify the engines (optional)
 
@@ -95,6 +109,7 @@ in the SQL editor after applying migrations; they `raise notice` on pass and `as
 - `cs_health_engine_test.sql` (§7.3 scoring + bands + trip-wires)
 - `cs_alert_engine_test.sql` (§7.5 four rules + renewal escalation)
 - `cs_pipeline_rules_test.sql` (§7.6 stage derivation)
+- `cs_staff_roles_test.sql` (§3 capability matrix)
 
 ---
 
