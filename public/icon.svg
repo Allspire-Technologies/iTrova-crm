@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="iTrova Admin OS">
+  <rect width="512" height="512" rx="112" fill="#1CA070"/>
+  <path d="M256 96l128 48v104c0 88-56 150-128 176-72-26-128-88-128-176V144l128-48z"
+        fill="none" stroke="#ffffff" stroke-width="28" stroke-linejoin="round"/>
+  <path d="M206 266l36 36 72-84" fill="none" stroke="#ffffff" stroke-width="28"
+        stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
