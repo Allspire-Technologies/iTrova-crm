@@ -22,6 +22,7 @@ import { getCustomersFacets, type CustomersFacets } from "@/lib/admin";
 import { accountAssignment } from "@/lib/cs";
 import type { HealthBand } from "@/lib/cs";
 import { useAuth } from "@/contexts/AuthContext";
+import { roleSeesAll } from "@/lib/roles";
 import { formatDate, formatRelative } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -109,7 +110,9 @@ export default function Customers() {
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
 
-  const canAssign = useAuth().role === "admin"; // assigning account managers is Management/Admin-only (§3)
+  const authRole = useAuth().role;
+  const canAssign = authRole === "admin"; // assigning account managers is Management/Admin-only (§3)
+  const seesAll = roleSeesAll(authRole); // Support sees only assigned customers
   const [facets, setFacets] = useState<CustomersFacets | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkManager, setBulkManager] = useState("");
@@ -289,7 +292,7 @@ export default function Customers() {
     <>
       <PageHeader
         title="Customers"
-        subtitle={`${total} ${total === 1 ? "business" : "businesses"}${chips.length ? " match your filters" : " on iTrova"}`}
+        subtitle={`${total} ${total === 1 ? "business" : "businesses"}${chips.length ? " match your filters" : seesAll ? " on iTrova" : " assigned to you"}`}
       />
 
       <div className="space-y-4">
