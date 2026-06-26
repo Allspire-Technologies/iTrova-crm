@@ -37,7 +37,7 @@ export function Sparkline({
   const area = `${line} L${width},${height} L0,${height} Z`;
   const [lx, ly] = pts[n - 1];
   return (
-    <svg role="img" aria-label={ariaLabel} width={width} height={height} viewBox={`0 0 ${width} ${height}`} className={className} preserveAspectRatio="none">
+    <svg role="img" aria-label={ariaLabel} width="100%" height={height} viewBox={`0 0 ${width} ${height}`} className={className} preserveAspectRatio="none">
       <path d={area} className={fillClass} stroke="none" />
       <path d={line} className={strokeClass} fill="none" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
       <circle cx={lx} cy={ly} r={2.5} className={dotClass} />
