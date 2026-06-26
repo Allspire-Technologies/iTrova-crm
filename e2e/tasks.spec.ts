@@ -37,7 +37,7 @@ test.describe("Tasks queue (§7.7)", () => {
     await page.goto("/tasks");
 
     const patch = page.waitForRequest((r) => isTask(r.url()) && r.method() === "PATCH");
-    await page.getByLabel("Status for Renewal discussion").selectOption("done");
+    await page.getByLabel("Status for Renewal discussion").first().selectOption("done");
     await patch;
   });
 });
