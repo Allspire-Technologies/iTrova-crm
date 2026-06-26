@@ -21,6 +21,7 @@ import {
 import { getCustomersFacets, type CustomersFacets } from "@/lib/admin";
 import { accountAssignment } from "@/lib/cs";
 import type { HealthBand } from "@/lib/cs";
+import { useAuth } from "@/contexts/AuthContext";
 import { formatDate, formatRelative } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -108,6 +109,7 @@ export default function Customers() {
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
 
+  const canAssign = useAuth().role === "admin"; // assigning account managers is Management/Admin-only (§3)
   const [facets, setFacets] = useState<CustomersFacets | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkManager, setBulkManager] = useState("");
@@ -405,8 +407,8 @@ export default function Customers() {
           </div>
         )}
 
-        {/* Bulk action bar */}
-        {selected.size > 0 && (
+        {/* Bulk action bar (Management/Admin only) */}
+        {canAssign && selected.size > 0 && (
           <div className="flex flex-wrap items-center gap-3 rounded-lg border border-brand/30 bg-secondary/50 px-4 py-2.5">
             <span className="text-sm font-medium text-brand-dark">{selected.size} selected</span>
             <select className={selectClass} value={bulkManager} onChange={(e) => setBulkManager(e.target.value)} aria-label="Assign account manager">
@@ -431,14 +433,16 @@ export default function Customers() {
             <TableHeader>
               <TableRow className="hover:bg-transparent">
                 <TableHead className="w-10">
-                  <input
-                    ref={headerRef}
-                    type="checkbox"
-                    className="size-4 cursor-pointer accent-brand align-middle"
-                    checked={allSelected}
-                    onChange={toggleAll}
-                    aria-label="Select all on this page"
-                  />
+                  {canAssign && (
+                    <input
+                      ref={headerRef}
+                      type="checkbox"
+                      className="size-4 cursor-pointer accent-brand align-middle"
+                      checked={allSelected}
+                      onChange={toggleAll}
+                      aria-label="Select all on this page"
+                    />
+                  )}
                 </TableHead>
                 <SortHead col="name" label="Business" />
                 <SortHead col="industry" label="Industry" />
@@ -464,13 +468,15 @@ export default function Customers() {
                   onClick={() => navigate(`/customers/${r.businessId}`)}
                 >
                   <TableCell onClick={(e) => e.stopPropagation()}>
-                    <input
-                      type="checkbox"
-                      className="size-4 cursor-pointer accent-brand align-middle"
-                      checked={selected.has(r.businessId)}
-                      onChange={() => toggleSelect(r.businessId)}
-                      aria-label={`Select ${r.name}`}
-                    />
+                    {canAssign && (
+                      <input
+                        type="checkbox"
+                        className="size-4 cursor-pointer accent-brand align-middle"
+                        checked={selected.has(r.businessId)}
+                        onChange={() => toggleSelect(r.businessId)}
+                        aria-label={`Select ${r.name}`}
+                      />
+                    )}
                   </TableCell>
                   <TableCell>
                     <div className="font-medium text-brand-dark">{r.name}</div>
@@ -520,14 +526,16 @@ export default function Customers() {
                 className="cursor-pointer rounded-xl border border-border/60 bg-card p-3 data-[state=selected]:border-brand/40"
               >
                 <div className="flex items-start gap-3">
-                  <input
-                    type="checkbox"
-                    className="mt-0.5 size-4 shrink-0 cursor-pointer accent-brand"
-                    checked={selected.has(r.businessId)}
-                    onChange={() => toggleSelect(r.businessId)}
-                    onClick={(e) => e.stopPropagation()}
-                    aria-label={`Select ${r.name}`}
-                  />
+                  {canAssign && (
+                    <input
+                      type="checkbox"
+                      className="mt-0.5 size-4 shrink-0 cursor-pointer accent-brand"
+                      checked={selected.has(r.businessId)}
+                      onChange={() => toggleSelect(r.businessId)}
+                      onClick={(e) => e.stopPropagation()}
+                      aria-label={`Select ${r.name}`}
+                    />
+                  )}
                   <div className="min-w-0 flex-1">
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">

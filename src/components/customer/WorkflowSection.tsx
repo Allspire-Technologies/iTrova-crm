@@ -9,6 +9,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { listBusinessAlerts, acknowledgeAlert, resolveAlert, recomputeAlerts } from "@/lib/alerts";
 import { recomputeHealth } from "@/lib/health";
 import { createTask, alertToTaskInput } from "@/lib/tasks";
+import { roleCanWrite } from "@/lib/roles";
 import type { CsAlert, CsHealthSnapshot, AlertSeverity } from "@/lib/cs";
 import { formatRelative } from "@/lib/format";
 
@@ -24,7 +25,9 @@ export function WorkflowSection({
   businessId: string;
   onHealthRecomputed?: (snapshot: CsHealthSnapshot) => void;
 }) {
-  const { user } = useAuth();
+  const { user, role } = useAuth();
+  const canTask = roleCanWrite(role, "tasks");
+  const canAlert = roleCanWrite(role, "alerts");
   const [alerts, setAlerts] = useState<CsAlert[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
@@ -139,17 +142,21 @@ export function WorkflowSection({
                 </span>
               )}
               <span className="text-xs text-muted-foreground">{formatRelative(a.created_at)}</span>
-              <Button size="sm" variant="ghost" onClick={() => onCreateTask(a)} disabled={busy === `task:${a.id}`} title="Create a prefilled task from this alert">
-                <ListPlus /> Create task
-              </Button>
-              {a.status === "active" && (
+              {canTask && (
+                <Button size="sm" variant="ghost" onClick={() => onCreateTask(a)} disabled={busy === `task:${a.id}`} title="Create a prefilled task from this alert">
+                  <ListPlus /> Create task
+                </Button>
+              )}
+              {canAlert && a.status === "active" && (
                 <Button size="sm" variant="ghost" onClick={() => onAck(a.id)} disabled={busy === a.id}>
                   Acknowledge
                 </Button>
               )}
-              <Button size="sm" variant="outline" onClick={() => onResolve(a.id)} disabled={busy === a.id}>
-                Resolve
-              </Button>
+              {canAlert && (
+                <Button size="sm" variant="outline" onClick={() => onResolve(a.id)} disabled={busy === a.id}>
+                  Resolve
+                </Button>
+              )}
             </li>
           ))}
         </ul>

@@ -25,6 +25,8 @@ import {
   type TaskRole,
 } from "@/lib/cs";
 import { ROLE_LABELS } from "@/lib/tasks";
+import { useAuth } from "@/contexts/AuthContext";
+import { roleCanWrite } from "@/lib/roles";
 
 const selectClass =
   "h-9 rounded-md border border-input bg-background px-2 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring";
@@ -45,6 +47,7 @@ function Empty({ label }: { label: string }) {
 
 // --------------------------------------------------------------------------- Notes
 function NotesTab({ businessId }: { businessId: string }) {
+  const canWrite = roleCanWrite(useAuth().role, "notes");
   const [list, setList] = useState<CsNote[] | null>(null);
   const [type, setType] = useState<NoteType>("general");
   const [body, setBody] = useState("");
@@ -82,6 +85,7 @@ function NotesTab({ businessId }: { businessId: string }) {
 
   return (
     <div className="space-y-4">
+      {canWrite && (
       <div className="space-y-2 rounded-lg border border-border/60 bg-secondary/30 p-3">
         <div className="flex items-center gap-2">
           <select className={selectClass} value={type} onChange={(e) => setType(e.target.value as NoteType)} aria-label="Note type">
@@ -94,6 +98,7 @@ function NotesTab({ businessId }: { businessId: string }) {
         <textarea className={textareaClass} value={body} onChange={(e) => setBody(e.target.value)} placeholder="Write a note…" aria-label="Note body" />
         <Button size="sm" onClick={add} disabled={saving || !body.trim()}>Add note</Button>
       </div>
+      )}
 
       <ul className="space-y-2">
         {list == null && <Empty label="Loading…" />}
@@ -115,7 +120,7 @@ function NotesTab({ businessId }: { businessId: string }) {
             ) : (
               <div className="mt-1.5 flex items-start justify-between gap-3">
                 <p className="whitespace-pre-wrap text-sm text-foreground">{n.body}</p>
-                <Button size="sm" variant="ghost" onClick={() => { setEditing(n.id); setEditBody(n.body); }}>Edit</Button>
+                {canWrite && <Button size="sm" variant="ghost" onClick={() => { setEditing(n.id); setEditBody(n.body); }}>Edit</Button>}
               </div>
             )}
           </Row>
@@ -127,6 +132,7 @@ function NotesTab({ businessId }: { businessId: string }) {
 
 // --------------------------------------------------------------------------- Tickets
 function TicketsTab({ businessId }: { businessId: string }) {
+  const canWrite = roleCanWrite(useAuth().role, "tickets");
   const [list, setList] = useState<CsTicket[] | null>(null);
   const [title, setTitle] = useState("");
   const [priority, setPriority] = useState<TicketPriority>("med");
@@ -161,6 +167,7 @@ function TicketsTab({ businessId }: { businessId: string }) {
 
   return (
     <div className="space-y-4">
+      {canWrite && (
       <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border/60 bg-secondary/30 p-3">
         <Input className="min-w-[200px] flex-1" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="New ticket title…" aria-label="Ticket title" />
         <select className={selectClass} value={priority} onChange={(e) => setPriority(e.target.value as TicketPriority)} aria-label="Ticket priority">
@@ -171,6 +178,7 @@ function TicketsTab({ businessId }: { businessId: string }) {
         </select>
         <Button size="sm" onClick={add} disabled={saving || !title.trim()}>Add ticket</Button>
       </div>
+      )}
 
       <ul className="space-y-2">
         {list == null && <Empty label="Loading…" />}
@@ -181,6 +189,7 @@ function TicketsTab({ businessId }: { businessId: string }) {
               <span className="min-w-[10rem] flex-1 font-medium text-brand-dark">{t.title}</span>
               <select
                 className={selectClass}
+                disabled={!canWrite}
                 value={t.priority}
                 onChange={(e) => patch(t.id, { priority: e.target.value as TicketPriority })}
                 aria-label={`Priority for ${t.title}`}
@@ -192,6 +201,7 @@ function TicketsTab({ businessId }: { businessId: string }) {
               </select>
               <select
                 className={selectClass}
+                disabled={!canWrite}
                 value={t.status}
                 onChange={(e) => {
                   const status = e.target.value as TicketStatus;
@@ -214,6 +224,7 @@ function TicketsTab({ businessId }: { businessId: string }) {
 
 // --------------------------------------------------------------------------- Feature requests
 function FeaturesTab({ businessId }: { businessId: string }) {
+  const canWrite = roleCanWrite(useAuth().role, "features");
   const [list, setList] = useState<CsFeatureRequest[] | null>(null);
   const [title, setTitle] = useState("");
   const [detail, setDetail] = useState("");
@@ -249,11 +260,13 @@ function FeaturesTab({ businessId }: { businessId: string }) {
 
   return (
     <div className="space-y-4">
+      {canWrite && (
       <div className="space-y-2 rounded-lg border border-border/60 bg-secondary/30 p-3">
         <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Feature request title…" aria-label="Feature title" />
         <textarea className={textareaClass} value={detail} onChange={(e) => setDetail(e.target.value)} placeholder="Detail (optional)…" aria-label="Feature detail" />
         <Button size="sm" onClick={add} disabled={saving || !title.trim()}>Add request</Button>
       </div>
+      )}
 
       <ul className="space-y-2">
         {list == null && <Empty label="Loading…" />}
@@ -263,7 +276,7 @@ function FeaturesTab({ businessId }: { businessId: string }) {
             <div className="flex flex-wrap items-center gap-3">
               <span className="min-w-[10rem] flex-1 font-medium text-brand-dark">{f.title}</span>
               <Badge variant="outline">{f.votes} votes</Badge>
-              <select className={selectClass} value={f.status} onChange={(e) => setStatus(f.id, e.target.value as FeatureRequestStatus)} aria-label={`Status for ${f.title}`}>
+              <select className={selectClass} disabled={!canWrite} value={f.status} onChange={(e) => setStatus(f.id, e.target.value as FeatureRequestStatus)} aria-label={`Status for ${f.title}`}>
                 <option value="new">New</option>
                 <option value="planned">Planned</option>
                 <option value="shipped">Shipped</option>
@@ -280,6 +293,7 @@ function FeaturesTab({ businessId }: { businessId: string }) {
 
 // --------------------------------------------------------------------------- Feedback
 function FeedbackTab({ businessId }: { businessId: string }) {
+  const canWrite = roleCanWrite(useAuth().role, "feedback");
   const [list, setList] = useState<CsFeedback[] | null>(null);
   const [rating, setRating] = useState("5");
   const [body, setBody] = useState("");
@@ -305,6 +319,7 @@ function FeedbackTab({ businessId }: { businessId: string }) {
 
   return (
     <div className="space-y-4">
+      {canWrite && (
       <div className="space-y-2 rounded-lg border border-border/60 bg-secondary/30 p-3">
         <div className="flex items-center gap-2">
           <select className={selectClass} value={rating} onChange={(e) => setRating(e.target.value)} aria-label="Rating">
@@ -317,6 +332,7 @@ function FeedbackTab({ businessId }: { businessId: string }) {
         <textarea className={textareaClass} value={body} onChange={(e) => setBody(e.target.value)} placeholder="What did the customer say?" aria-label="Feedback body" />
         <Button size="sm" onClick={add} disabled={saving || !body.trim()}>Add feedback</Button>
       </div>
+      )}
 
       <ul className="space-y-2">
         {list == null && <Empty label="Loading…" />}
@@ -337,6 +353,7 @@ function FeedbackTab({ businessId }: { businessId: string }) {
 
 // --------------------------------------------------------------------------- Tasks
 function TasksTab({ businessId }: { businessId: string }) {
+  const canWrite = roleCanWrite(useAuth().role, "tasks");
   const [list, setList] = useState<CsTask[] | null>(null);
   const [title, setTitle] = useState("");
   const [type, setType] = useState<TaskType>("follow_up");
@@ -374,6 +391,7 @@ function TasksTab({ businessId }: { businessId: string }) {
 
   return (
     <div className="space-y-4">
+      {canWrite && (
       <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border/60 bg-secondary/30 p-3">
         <Input className="min-w-[180px] flex-1" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="New task…" aria-label="Task title" />
         <select className={selectClass} value={type} onChange={(e) => setType(e.target.value as TaskType)} aria-label="Task type">
@@ -390,6 +408,7 @@ function TasksTab({ businessId }: { businessId: string }) {
         <input type="date" className={selectClass} value={due} onChange={(e) => setDue(e.target.value)} aria-label="Task due date" />
         <Button size="sm" onClick={add} disabled={saving || !title.trim()}>Add task</Button>
       </div>
+      )}
 
       <ul className="space-y-2">
         {list == null && <Empty label="Loading…" />}
@@ -401,7 +420,7 @@ function TasksTab({ businessId }: { businessId: string }) {
               <Badge variant="secondary" className="capitalize">{t.type.replace("_", " ")}</Badge>
               {t.assignee_role && <span className="text-xs text-muted-foreground">{ROLE_LABELS[t.assignee_role]}</span>}
               {t.due_date && <span className="text-xs text-muted-foreground">Due {formatDate(t.due_date)}</span>}
-              <select className={selectClass} value={t.status} onChange={(e) => setStatus(t.id, e.target.value as TaskStatus)} aria-label={`Status for ${t.title}`}>
+              <select className={selectClass} disabled={!canWrite} value={t.status} onChange={(e) => setStatus(t.id, e.target.value as TaskStatus)} aria-label={`Status for ${t.title}`}>
                 <option value="todo">To do</option>
                 <option value="doing">Doing</option>
                 <option value="done">Done</option>

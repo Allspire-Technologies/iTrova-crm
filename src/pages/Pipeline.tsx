@@ -11,6 +11,8 @@ import { HealthBadge } from "@/components/HealthBadge";
 import { getPipelineBoard, type PipelineCard } from "@/lib/admin";
 import { pipeline } from "@/lib/cs";
 import type { PipelineStage } from "@/lib/cs";
+import { useAuth } from "@/contexts/AuthContext";
+import { roleCanWrite } from "@/lib/roles";
 import { formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -27,6 +29,7 @@ const STAGES: { key: PipelineStage; label: string }[] = [
 
 export default function Pipeline() {
   const navigate = useNavigate();
+  const canMove = roleCanWrite(useAuth().role, "pipeline"); // CSO/Admin may move stages (§3)
   const [cards, setCards] = useState<PipelineCard[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
@@ -69,7 +72,7 @@ export default function Pipeline() {
     <>
       <PageHeader
         title="Pipeline"
-        subtitle="Lifecycle stages auto-update nightly. Drag a card to pin it manually."
+        subtitle={canMove ? "Lifecycle stages auto-update nightly. Drag a card to pin it manually." : "Lifecycle stages auto-update nightly."}
         action={
           <Button variant="outline" size="sm" onClick={() => setReloadKey((k) => k + 1)}>
             <RefreshCw /> Refresh
@@ -119,7 +122,7 @@ export default function Pipeline() {
                   {items.map((c) => (
                     <div
                       key={c.businessId}
-                      draggable
+                      draggable={canMove}
                       onDragStart={(e) => {
                         e.dataTransfer.setData("text/plain", c.businessId);
                         e.dataTransfer.effectAllowed = "move";
@@ -137,7 +140,7 @@ export default function Pipeline() {
                     >
                       <div className="flex items-start justify-between gap-2">
                         <span className="font-medium text-brand-dark">{c.name}</span>
-                        <GripVertical className="size-4 shrink-0 cursor-grab text-muted-foreground/50 group-hover:text-muted-foreground" />
+                        {canMove && <GripVertical className="size-4 shrink-0 cursor-grab text-muted-foreground/50 group-hover:text-muted-foreground" />}
                       </div>
                       <div className="mt-2 flex items-center justify-between gap-2">
                         <HealthBadge band={c.healthBand} score={c.healthScore} />

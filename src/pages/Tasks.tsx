@@ -20,6 +20,8 @@ import {
   type TaskFilter,
 } from "@/lib/tasks";
 import type { TaskRole, TaskStatus, TaskType } from "@/lib/cs";
+import { useAuth } from "@/contexts/AuthContext";
+import { roleCanWrite } from "@/lib/roles";
 import { formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -32,6 +34,7 @@ const STATUSES: TaskStatus[] = ["todo", "doing", "done"];
 
 export default function Tasks() {
   const navigate = useNavigate();
+  const canTasks = roleCanWrite(useAuth().role, "tasks"); // CSO/Admin manage tasks (§3)
   const [filter, setFilter] = useState<TaskFilter>({});
   const [tasks, setTasks] = useState<TaskWithBusiness[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -92,7 +95,8 @@ export default function Tasks() {
     <>
       <PageHeader title="Tasks" subtitle="The customer-success task queue — calls, meetings, follow-ups and renewals." />
 
-      {/* Create */}
+      {/* Create (CSO/Admin only) */}
+      {canTasks && (
       <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-border/60 bg-secondary/30 p-3">
         <Input className="min-w-[200px] flex-1" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="New task…" aria-label="Task title" />
         <select className={selectClass} value={type} onChange={(e) => setType(e.target.value as TaskType)} aria-label="Task type">
@@ -108,6 +112,7 @@ export default function Tasks() {
         <input type="date" className={selectClass} value={due} onChange={(e) => setDue(e.target.value)} aria-label="Due date" />
         <Button size="sm" onClick={add} disabled={saving || !title.trim()}>Add task</Button>
       </div>
+      )}
 
       {/* Filters */}
       <div className="mb-4 flex flex-wrap items-center gap-2">
@@ -174,7 +179,8 @@ export default function Tasks() {
                   <TableCell className="whitespace-nowrap text-muted-foreground">{formatDate(t.due_date)}</TableCell>
                   <TableCell>
                     <select
-                      className={selectClass}
+                      className={cn(selectClass, "disabled:cursor-not-allowed disabled:opacity-60")}
+                      disabled={!canTasks}
                       value={t.status}
                       onChange={(e) => changeStatus(t.id, e.target.value as TaskStatus)}
                       aria-label={`Status for ${t.title}`}
@@ -210,7 +216,8 @@ export default function Tasks() {
                 {t.due_date && <span>Due {formatDate(t.due_date)}</span>}
               </div>
               <select
-                className={cn(selectClass, "mt-2 w-full")}
+                className={cn(selectClass, "mt-2 w-full disabled:cursor-not-allowed disabled:opacity-60")}
+                disabled={!canTasks}
                 value={t.status}
                 onChange={(e) => changeStatus(t.id, e.target.value as TaskStatus)}
                 aria-label={`Status for ${t.title}`}
