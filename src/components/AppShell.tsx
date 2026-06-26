@@ -1,7 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
-import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
   LayoutDashboard,
@@ -13,6 +12,8 @@ import {
   ShieldCheck,
   PanelLeftClose,
   PanelLeftOpen,
+  Menu,
+  X,
 } from "lucide-react";
 
 const nav = [
@@ -57,6 +58,7 @@ export default function AppShell() {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem(STORAGE_KEY) === "1");
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   const toggleCollapsed = () => {
     setCollapsed((c) => {
@@ -71,6 +73,14 @@ export default function AppShell() {
     navigate("/login", { replace: true });
   };
 
+  // Close the mobile drawer on Escape.
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setMobileOpen(false);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [mobileOpen]);
+
   const Brand = (
     <div className="flex items-center gap-2 font-display text-xl font-bold">
       <div className="grid size-9 shrink-0 place-items-center rounded-xl bg-sidebar-primary text-sidebar-primary-foreground">
@@ -83,9 +93,23 @@ export default function AppShell() {
     </div>
   );
 
+  const SignOutButton = ({ collapsed: c }: { collapsed?: boolean }) => (
+    <button
+      onClick={handleSignOut}
+      title={c ? "Sign out" : undefined}
+      className={cn(
+        "flex w-full items-center rounded-lg py-2 text-sm text-sidebar-foreground/80 transition-colors hover:bg-sidebar-accent/50",
+        c ? "justify-center px-0" : "gap-3 px-3",
+      )}
+    >
+      <LogOut className="size-4 shrink-0" />
+      {!c && <span>Sign out</span>}
+    </button>
+  );
+
   return (
     <div className="flex min-h-screen bg-gradient-soft">
-      {/* Sidebar */}
+      {/* Desktop sidebar */}
       <aside
         className={cn(
           "sticky top-0 hidden h-screen flex-col bg-sidebar text-sidebar-foreground transition-[width] duration-200 ease-in-out lg:flex",
@@ -112,30 +136,49 @@ export default function AppShell() {
           <NavList collapsed={collapsed} />
         </div>
         <div className="shrink-0 border-t border-sidebar-border p-3">
-          <button
-            onClick={handleSignOut}
-            title={collapsed ? "Sign out" : undefined}
-            className={cn(
-              "flex w-full items-center rounded-lg py-2 text-sm text-sidebar-foreground/80 transition-colors hover:bg-sidebar-accent/50",
-              collapsed ? "justify-center px-0" : "gap-3 px-3",
-            )}
-          >
-            <LogOut className="size-4 shrink-0" />
-            {!collapsed && <span>Sign out</span>}
-          </button>
+          <SignOutButton collapsed={collapsed} />
         </div>
       </aside>
+
+      {/* Mobile drawer */}
+      {mobileOpen && (
+        <div className="fixed inset-0 z-40 lg:hidden">
+          <div className="absolute inset-0 bg-black/40 animate-fade-in" onClick={() => setMobileOpen(false)} aria-hidden />
+          <aside className="absolute inset-y-0 left-0 flex w-72 max-w-[80%] flex-col bg-sidebar text-sidebar-foreground shadow-xl">
+            <div className="flex h-16 shrink-0 items-center justify-between border-b border-sidebar-border px-4">
+              {Brand}
+              <button
+                onClick={() => setMobileOpen(false)}
+                aria-label="Close menu"
+                className="grid size-9 shrink-0 place-items-center rounded-lg text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
+              >
+                <X className="size-5" />
+              </button>
+            </div>
+            <div className="flex min-h-0 flex-1 flex-col pt-3">
+              <NavList onNavigate={() => setMobileOpen(false)} />
+            </div>
+            <div className="shrink-0 border-t border-sidebar-border p-3">
+              <SignOutButton />
+            </div>
+          </aside>
+        </div>
+      )}
 
       {/* Main */}
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="sticky top-0 z-10 border-b border-border bg-background/80 backdrop-blur">
-          <div className="flex h-16 items-center gap-3 px-4 lg:px-8">
+          <div className="flex h-16 items-center gap-2 px-4 lg:px-8">
+            <button
+              onClick={() => setMobileOpen(true)}
+              aria-label="Open menu"
+              className="grid size-10 shrink-0 place-items-center rounded-lg text-foreground/70 transition-colors hover:bg-secondary lg:hidden"
+            >
+              <Menu className="size-5" />
+            </button>
             <div className="lg:hidden">{Brand}</div>
             <div className="min-w-0 flex-1" />
-            <div className="max-w-[200px] truncate text-sm text-muted-foreground">{user?.email}</div>
-            <Button variant="outline" size="sm" className="lg:hidden" onClick={handleSignOut}>
-              <LogOut className="size-4" />
-            </Button>
+            <div className="max-w-[160px] truncate text-sm text-muted-foreground sm:max-w-[200px]">{user?.email}</div>
           </div>
         </header>
         <main className="flex-1 animate-fade-in p-4 lg:p-8">
