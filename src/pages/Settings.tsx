@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { SlidersHorizontal, Users, ShieldCheck } from "lucide-react";
+import { SlidersHorizontal, Users, ShieldCheck, Lock } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/PageHeader";
 import { LoadingState } from "@/components/states/LoadingState";
@@ -8,13 +8,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { useAuth } from "@/contexts/AuthContext";
 import { getHealthSettings, updateHealthSettings, type HealthSettings, type HealthSettingsUpdate } from "@/lib/health";
 import { listCustomersPage, type CustomerPageRow } from "@/lib/customers";
 import { getCustomersFacets, type CustomersFacets } from "@/lib/admin";
 import { accountAssignment } from "@/lib/cs";
+import { listStaffRoles, setStaffRole, STAFF_ROLE_LABELS, STAFF_ROLES, type StaffRole, type StaffWithRole } from "@/lib/roles";
 
 const selectClass =
-  "h-9 rounded-md border border-input bg-background px-2 text-sm text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+  "h-9 rounded-md border border-input bg-background px-2 text-sm text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60";
 
 type FieldKey = keyof HealthSettingsUpdate;
 const FIELD_GROUPS: { title: string; fields: { key: FieldKey; label: string; hint?: string }[] }[] = [
@@ -58,8 +60,6 @@ const FIELD_GROUPS: { title: string; fields: { key: FieldKey; label: string; hin
   },
 ];
 
-// §3 role reference — what each internal role sees and does (informational until per-user
-// roles are enforced; today every internal user in platform_admins has full staff access).
 const ROLE_MATRIX = [
   { role: "Customer Success Officer", sees: "All customers, health, pipeline, tasks", does: "Notes/tickets/tasks, move pipeline, own renewals" },
   { role: "Product Manager", sees: "All customers, usage analytics, feature requests", does: "Triage feature requests, own adoption" },
@@ -67,7 +67,15 @@ const ROLE_MATRIX = [
   { role: "Management / Admin", sees: "Everything + revenue", does: "Full access, assign managers, tune thresholds" },
 ];
 
-function ThresholdsCard() {
+function AdminNote({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+      <Lock className="size-3.5" /> {children}
+    </p>
+  );
+}
+
+function ThresholdsCard({ canEdit }: { canEdit: boolean }) {
   const [settings, setSettings] = useState<HealthSettings | null>(null);
   const [form, setForm] = useState<Record<string, number>>({});
   const [error, setError] = useState<string | null>(null);
@@ -137,6 +145,7 @@ function ThresholdsCard() {
                       <Input
                         type="number"
                         min={0}
+                        disabled={!canEdit}
                         value={form[f.key] ?? ""}
                         onChange={(e) => setForm((prev) => ({ ...prev, [f.key]: Number(e.target.value) }))}
                         className="mt-1"
@@ -147,10 +156,14 @@ function ThresholdsCard() {
                 </div>
               </div>
             ))}
-            <div className="flex items-center gap-3">
-              <Button onClick={save} disabled={!dirty || saving}>{saving ? "Saving…" : "Save thresholds"}</Button>
-              {dirty && <span className="text-sm text-muted-foreground">Unsaved changes</span>}
-            </div>
+            {canEdit ? (
+              <div className="flex items-center gap-3">
+                <Button onClick={save} disabled={!dirty || saving}>{saving ? "Saving…" : "Save thresholds"}</Button>
+                {dirty && <span className="text-sm text-muted-foreground">Unsaved changes</span>}
+              </div>
+            ) : (
+              <AdminNote>Only Management/Admin can change thresholds.</AdminNote>
+            )}
           </div>
         )}
       </CardContent>
@@ -158,7 +171,7 @@ function ThresholdsCard() {
   );
 }
 
-function AssignmentCard() {
+function AssignmentCard({ canEdit }: { canEdit: boolean }) {
   const [facets, setFacets] = useState<CustomersFacets | null>(null);
   const [rows, setRows] = useState<CustomerPageRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -170,7 +183,6 @@ function AssignmentCard() {
     getCustomersFacets().then(setFacets).catch(() => setFacets({ plans: [], industries: [], managers: [] }));
   }, []);
 
-  // Debounce the search box into the query the list runs against.
   useEffect(() => {
     const t = setTimeout(() => setQuery(search), 300);
     return () => clearTimeout(t);
@@ -231,6 +243,7 @@ function AssignmentCard() {
                     <TableCell>
                       <select
                         className={selectClass}
+                        disabled={!canEdit}
                         value={r.accountManagerId ?? ""}
                         onChange={(e) => assign(r, e.target.value)}
                         aria-label={`Account manager for ${r.name}`}
@@ -247,23 +260,98 @@ function AssignmentCard() {
             </Table>
           </div>
         )}
-        <p className="text-xs text-muted-foreground">Showing up to 10 matches — search to narrow. Bulk assignment is also available on the Customers table.</p>
+        {canEdit ? (
+          <p className="text-xs text-muted-foreground">Showing up to 10 matches — search to narrow. Bulk assignment is also available on the Customers table.</p>
+        ) : (
+          <AdminNote>Only Management/Admin can assign account managers.</AdminNote>
+        )}
       </CardContent>
     </Card>
   );
 }
 
-function RolesCard({ staffCount }: { staffCount: number | null }) {
+function RolesCard({ isAdmin }: { isAdmin: boolean }) {
+  const [staff, setStaff] = useState<StaffWithRole[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    setStaff(null);
+    setError(null);
+    listStaffRoles()
+      .then((s) => !cancelled && setStaff(s))
+      .catch((e) => !cancelled && setError(e?.message ?? "Failed to load staff."));
+    return () => {
+      cancelled = true;
+    };
+  }, [reloadKey]);
+
+  async function change(s: StaffWithRole, role: StaffRole) {
+    const prev = staff ?? [];
+    setStaff((list) => (list ?? []).map((x) => (x.userId === s.userId ? { ...x, role } : x)));
+    try {
+      await setStaffRole(s.userId, role);
+      toast.success(`${s.name ?? s.email}: ${STAFF_ROLE_LABELS[role]}.`);
+    } catch (e) {
+      setStaff(prev);
+      toast.error((e as { message?: string })?.message ?? "Couldn't update role.");
+    }
+  }
+
   return (
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2"><ShieldCheck className="size-4" /> Roles & visibility</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-3">
+      <CardContent className="space-y-4">
         <p className="text-sm text-muted-foreground">
-          Admin OS is staff-only{staffCount != null ? ` — ${staffCount} internal ${staffCount === 1 ? "user" : "users"} today` : ""}. Per-user roles
-          below are the intended model (§3); currently every internal user has full staff access.
+          {isAdmin ? "Assign each internal user a role." : "Your access is set by your role."} Only Management/Admin can change roles.
         </p>
+
+        {error ? (
+          <ErrorState message={error} onRetry={() => setReloadKey((k) => k + 1)} />
+        ) : staff === null ? (
+          <LoadingState label="Loading staff…" />
+        ) : (
+          <div className="rounded-lg border border-border/60">
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead>Member</TableHead>
+                  <TableHead>Email</TableHead>
+                  <TableHead>Role</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {staff.map((s) => (
+                  <TableRow key={s.userId} className="hover:bg-transparent">
+                    <TableCell className="font-medium text-brand-dark">{s.name ?? "—"}</TableCell>
+                    <TableCell className="text-muted-foreground">{s.email ?? "—"}</TableCell>
+                    <TableCell>
+                      {isAdmin ? (
+                        <select
+                          className={selectClass}
+                          value={s.role}
+                          onChange={(e) => change(s, e.target.value as StaffRole)}
+                          aria-label={`Role for ${s.name ?? s.email}`}
+                        >
+                          {STAFF_ROLES.map((r) => (
+                            <option key={r} value={r}>{STAFF_ROLE_LABELS[r]}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <span className="text-muted-foreground">{STAFF_ROLE_LABELS[s.role]}</span>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+
+        {/* §3 reference: what each role can see / do */}
         <div className="rounded-lg border border-border/60">
           <Table>
             <TableHeader>
@@ -290,18 +378,16 @@ function RolesCard({ staffCount }: { staffCount: number | null }) {
 }
 
 export default function Settings() {
-  const [staffCount, setStaffCount] = useState<number | null>(null);
-  useEffect(() => {
-    getCustomersFacets().then((f) => setStaffCount(f.managers.length)).catch(() => setStaffCount(null));
-  }, []);
+  const { role } = useAuth();
+  const isAdmin = role === "admin";
 
   return (
     <>
       <PageHeader title="Settings" subtitle="Tune the engine, manage account managers and review roles." />
       <div className="space-y-6">
-        <ThresholdsCard />
-        <AssignmentCard />
-        <RolesCard staffCount={staffCount} />
+        <ThresholdsCard canEdit={isAdmin} />
+        <AssignmentCard canEdit={isAdmin} />
+        <RolesCard isAdmin={isAdmin} />
       </div>
     </>
   );

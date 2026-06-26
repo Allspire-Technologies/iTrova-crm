@@ -24,7 +24,7 @@ test.describe("Settings (§3/§8)", () => {
     await page.goto("/settings");
 
     await expect(page.getByText("Roles & visibility")).toBeVisible();
-    await expect(page.getByText("Customer Success Officer").first()).toBeVisible();
+    await expect(page.getByText("Triage feature requests, own adoption")).toBeVisible(); // §3 matrix
     await expect(page.getByText("Account-manager assignment")).toBeVisible();
     await expect(page.getByRole("row", { name: new RegExp(CUSTOMER.name) })).toBeVisible();
   });
@@ -37,5 +37,27 @@ test.describe("Settings (§3/§8)", () => {
     const post = page.waitForRequest((r) => r.url().includes("/rest/v1/cs_account_assignment") && r.method() === "POST");
     await page.getByLabel(`Account manager for ${CUSTOMER.name}`).selectOption(MANAGER.id);
     await post;
+  });
+
+  test("admin can change a staff member's role (writes cs_staff_role)", async ({ page }) => {
+    await signIn(page, { staff: true });
+    await stubSettings(page);
+    await page.goto("/settings");
+
+    const write = page.waitForRequest(
+      (r) => r.url().includes("/rest/v1/cs_staff_role") && (r.method() === "POST" || r.method() === "PATCH"),
+    );
+    await page.getByLabel(`Role for ${MANAGER.name}`).selectOption("cso");
+    await write;
+  });
+
+  test("a non-admin (CSO) sees settings read-only", async ({ page }) => {
+    await signIn(page, { staff: true, role: "cso" });
+    await stubSettings(page);
+    await page.goto("/settings");
+
+    await expect(page.getByText("Only Management/Admin can change thresholds")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Save thresholds" })).toHaveCount(0);
+    await expect(page.getByLabel(`Role for ${MANAGER.name}`)).toHaveCount(0); // read-only, no select
   });
 });
