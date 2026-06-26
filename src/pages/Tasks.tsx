@@ -143,7 +143,8 @@ export default function Tasks() {
       ) : tasks.length === 0 ? (
         <EmptyState icon={ListChecks} title="No tasks" description={hasFilter ? "No tasks match these filters." : "Create a task above to get started."} />
       ) : (
-        <div className="rounded-xl border border-border/60 bg-card">
+        <>
+        <div className="hidden rounded-xl border border-border/60 bg-card sm:block">
           <Table>
             <TableHeader>
               <TableRow className="hover:bg-transparent">
@@ -188,6 +189,40 @@ export default function Tasks() {
             </TableBody>
           </Table>
         </div>
+
+        {/* Cards (mobile) */}
+        <div className="space-y-2 sm:hidden">
+          {tasks.map((t) => (
+            <div key={t.id} className="rounded-xl border border-border/60 bg-card p-3">
+              <div className="flex items-start justify-between gap-2">
+                <span className={cn("font-medium", t.status === "done" ? "text-muted-foreground line-through" : "text-brand-dark")}>{t.title}</span>
+                <Badge variant="secondary" className="shrink-0">{TYPE_LABELS[t.type]}</Badge>
+              </div>
+              <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                {t.business_id ? (
+                  <button type="button" onClick={() => navigate(`/customers/${t.business_id}`)} className="text-brand-dark underline-offset-2 hover:underline">
+                    {t.business_name ?? "Business"}
+                  </button>
+                ) : (
+                  <span>General</span>
+                )}
+                {t.assignee_role && <span>{ROLE_LABELS[t.assignee_role]}</span>}
+                {t.due_date && <span>Due {formatDate(t.due_date)}</span>}
+              </div>
+              <select
+                className={cn(selectClass, "mt-2 w-full")}
+                value={t.status}
+                onChange={(e) => changeStatus(t.id, e.target.value as TaskStatus)}
+                aria-label={`Status for ${t.title}`}
+              >
+                <option value="todo">To do</option>
+                <option value="doing">Doing</option>
+                <option value="done">Done</option>
+              </select>
+            </div>
+          ))}
+        </div>
+        </>
       )}
     </>
   );

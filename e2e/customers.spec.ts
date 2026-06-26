@@ -14,7 +14,7 @@ test.describe("Customer Overview (§7.2)", () => {
 
     const row = page.getByRole("row", { name: new RegExp(CUSTOMER.name) });
     await expect(row).toBeVisible();
-    await expect(page.getByText("Ada Obi")).toBeVisible();
+    await expect(page.getByText("Ada Obi").first()).toBeVisible();
 
     await row.click();
     await expect(page).toHaveURL(new RegExp(`/customers/${CUSTOMER.id}$`));
@@ -62,7 +62,7 @@ test.describe("Customer Overview (§7.2)", () => {
     await stubCustomers(page);
     await page.goto("/customers");
 
-    await page.getByLabel(`Select ${CUSTOMER.name}`).check();
+    await page.getByLabel(`Select ${CUSTOMER.name}`).first().check();
     await page.getByLabel("Assign account manager").selectOption(MANAGER.id);
 
     const write = page.waitForRequest(

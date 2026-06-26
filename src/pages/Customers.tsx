@@ -365,6 +365,24 @@ export default function Customers() {
           >
             At risk
           </button>
+
+          {/* Sort control (mobile only — desktop sorts via column headers) */}
+          <select
+            className={cn(selectClass, "w-full sm:hidden")}
+            value={q.sort ?? "health"}
+            onChange={(e) => {
+              const col = e.target.value as CustomersSort;
+              update({ sort: col, dir: col === "health" ? "asc" : DESC_FIRST.has(col) ? "desc" : "asc" });
+            }}
+            aria-label="Sort by"
+          >
+            <option value="health">Sort: Worst health first</option>
+            <option value="name">Sort: Business name</option>
+            <option value="joined">Sort: Newest joined</option>
+            <option value="sales">Sort: Most sales</option>
+            <option value="renewal">Sort: Renewal date</option>
+            <option value="manager">Sort: Account manager</option>
+          </select>
         </div>
 
         {/* Active filter chips */}
@@ -407,8 +425,8 @@ export default function Customers() {
           </div>
         )}
 
-        {/* Table */}
-        <div className="rounded-xl border border-border/60 bg-card">
+        {/* Table (desktop) */}
+        <div className="hidden rounded-xl border border-border/60 bg-card sm:block">
           <Table>
             <TableHeader>
               <TableRow className="hover:bg-transparent">
@@ -487,6 +505,56 @@ export default function Customers() {
               )}
             </TableBody>
           </Table>
+        </div>
+
+        {/* Cards (mobile) */}
+        <div className="space-y-2 sm:hidden">
+          {rows.length === 0 ? (
+            <EmptyState icon={Building2} title="No businesses match" description="Try widening or clearing your filters." />
+          ) : (
+            rows.map((r) => (
+              <div
+                key={r.businessId}
+                onClick={() => navigate(`/customers/${r.businessId}`)}
+                data-state={selected.has(r.businessId) ? "selected" : undefined}
+                className="cursor-pointer rounded-xl border border-border/60 bg-card p-3 data-[state=selected]:border-brand/40"
+              >
+                <div className="flex items-start gap-3">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5 size-4 shrink-0 cursor-pointer accent-brand"
+                    checked={selected.has(r.businessId)}
+                    onChange={() => toggleSelect(r.businessId)}
+                    onClick={(e) => e.stopPropagation()}
+                    aria-label={`Select ${r.name}`}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="truncate font-medium text-brand-dark">{r.name}</div>
+                        {r.ownerName && <div className="truncate text-xs text-muted-foreground">{r.ownerName}</div>}
+                      </div>
+                      <HealthBadge band={r.healthBand} score={r.healthScore} />
+                    </div>
+                    <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                      <PlanBadge planKey={r.planKey} />
+                      <SubscriptionBadge status={r.subscriptionStatus} />
+                      {r.industry && <span className="text-xs text-muted-foreground">· {r.industry}</span>}
+                    </div>
+                    <div className="mt-2 grid grid-cols-3 gap-2 text-center text-xs text-muted-foreground">
+                      <div><span className="block font-medium tabular-nums text-foreground">{r.salesCount}</span>Sales</div>
+                      <div><span className="block font-medium tabular-nums text-foreground">{r.productsTotal}</span>Products</div>
+                      <div><span className="block font-medium tabular-nums text-foreground">{r.totalUsers}</span>Staff</div>
+                    </div>
+                    <div className="mt-2 flex items-center justify-between gap-2 text-xs text-muted-foreground">
+                      <span className="truncate">{r.accountManagerName ?? "Unassigned"}</span>
+                      {r.renewalDate && <span className="shrink-0">Renews {formatDate(r.renewalDate)}</span>}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
         </div>
 
         {/* Pagination */}
