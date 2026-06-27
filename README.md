@@ -75,6 +75,7 @@ supabase db push
 | 15 | `..230000_admin_health_trend` | `admin_health_trend()` for the Home chart |
 | 16 | `..240000_staff_roles` | `cs_staff_role` + capability helpers + role-aware `cs_*` RLS (§3) |
 | 17 | `..250000_role_scoped_reads` | role-scope the read RPCs (Support → assigned) + gate revenue |
+| 18 | `..627120000_assignable_staff_name` | `admin_list_staff()` prefers the invitee's entered name over the `'Staff'` profile placeholder |
 
 ### Seed the first internal admin
 
