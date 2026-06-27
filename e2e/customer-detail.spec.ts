@@ -17,8 +17,13 @@ test.describe("Customer Detail (§7.4)", () => {
     await expect(page.getByText(PROFILE_EXTRA.owner_email)).toBeVisible();
     await expect(page.getByText("Food & Beverage")).toBeVisible();
     await expect(page.getByText("Onboarding").first()).toBeVisible();
-    await expect(page.getByText("No login in 21 days")).toBeVisible();
     await expect(page.getByText("Health trend")).toBeVisible(); // sparkline from snapshot history
+    // Health breakdown: scored factors + trip-wire/warning flags (not raw JSON).
+    await expect(page.getByText("Health breakdown")).toBeVisible();
+    await expect(page.getByText("Login recency")).toBeVisible();
+    await expect(page.getByText("No sales recorded")).toBeVisible(); // sales_activity detail
+    await expect(page.getByText("No login in 21 days")).toBeVisible(); // trip-wire, sentence-cased
+    await expect(page.getByText("No sales in 30 days")).toBeVisible(); // warning
   });
 
   test("a non-admin (support) does not see the subscription amount", async ({ page }) => {
