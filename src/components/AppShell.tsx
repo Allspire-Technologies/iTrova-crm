@@ -182,7 +182,9 @@ export default function AppShell() {
           </div>
         </header>
         <main className="flex-1 animate-fade-in p-4 lg:p-8">
-          <div className="mx-auto w-full max-w-7xl">
+          {/* Fill the available width (just the page padding) so collapsing the sidebar uses the
+              freed space, instead of capping at a max width and leaving empty margins — matches iTrova. */}
+          <div className="w-full">
             <Outlet />
           </div>
         </main>
