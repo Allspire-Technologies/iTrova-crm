@@ -1,23 +1,24 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { CalendarClock, GripVertical, Pin, RefreshCw, Workflow } from "lucide-react";
+import { CalendarClock, Check, GripVertical, Pin, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/PageHeader";
-import { EmptyState } from "@/components/states/EmptyState";
 import { LoadingState } from "@/components/states/LoadingState";
 import { ErrorState } from "@/components/states/ErrorState";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { HealthBadge } from "@/components/HealthBadge";
 import { getPipelineBoard, type PipelineCard } from "@/lib/admin";
-import { pipeline } from "@/lib/cs";
-import type { PipelineStage } from "@/lib/cs";
+import { pipeline, leads, type CsLead, type PipelineStage } from "@/lib/cs";
 import { useAuth } from "@/contexts/AuthContext";
 import { roleCanWrite } from "@/lib/roles";
 import { formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
-const STAGES: { key: PipelineStage; label: string }[] = [
-  { key: "lead", label: "Lead" },
+// 'lead' is intentionally NOT here: the Lead column is a standalone prospect list (cs_lead),
+// decoupled from businesses. The other 7 stages are auto-derived from real businesses, so a
+// business can never be dragged into Lead (which used to freeze its onboarding auto-tracking).
+const BUSINESS_STAGES: { key: Exclude<PipelineStage, "lead">; label: string }[] = [
   { key: "registered", label: "Registered" },
   { key: "subscribed", label: "Subscribed" },
   { key: "onboarding", label: "Onboarding" },
@@ -27,21 +28,45 @@ const STAGES: { key: PipelineStage; label: string }[] = [
   { key: "churned", label: "Churned" },
 ];
 
+const EMPTY_FORM = { name: "", contact_name: "", contact_email: "", contact_phone: "", source: "", notes: "" };
+
+function FormField({ label, className, children }: { label: string; className?: string; children: React.ReactNode }) {
+  return (
+    <label className={cn("block space-y-1", className)}>
+      <span className="text-xs text-muted-foreground">{label}</span>
+      {children}
+    </label>
+  );
+}
+
+const columnClass = "flex w-72 shrink-0 flex-col rounded-xl border bg-secondary/30";
+
 export default function Pipeline() {
   const navigate = useNavigate();
-  const canMove = roleCanWrite(useAuth().role, "pipeline"); // CSO/Admin may move stages (§3)
+  const canMove = roleCanWrite(useAuth().role, "pipeline"); // CSO/Admin may move stages + manage leads (§3)
   const [cards, setCards] = useState<PipelineCard[] | null>(null);
+  const [leadList, setLeadList] = useState<CsLead[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [dragId, setDragId] = useState<string | null>(null);
   const [overStage, setOverStage] = useState<PipelineStage | null>(null);
 
+  // Add-lead form (all fields optional).
+  const [addOpen, setAddOpen] = useState(false);
+  const [form, setForm] = useState(EMPTY_FORM);
+  const [saving, setSaving] = useState(false);
+
   useEffect(() => {
     let cancelled = false;
     setCards(null);
+    setLeadList(null);
     setError(null);
-    getPipelineBoard()
-      .then((c) => !cancelled && setCards(c))
+    Promise.all([getPipelineBoard(), leads.list("open")])
+      .then(([c, l]) => {
+        if (cancelled) return;
+        setCards(c);
+        setLeadList(l);
+      })
       .catch((e) => !cancelled && setError(e?.message ?? "Failed to load the pipeline."));
     return () => {
       cancelled = true;
@@ -49,54 +74,213 @@ export default function Pipeline() {
   }, [reloadKey]);
 
   const byStage = useMemo(() => {
-    const groups = new Map<PipelineStage, PipelineCard[]>(STAGES.map((s) => [s.key, []]));
+    const groups = new Map<string, PipelineCard[]>(BUSINESS_STAGES.map((s) => [s.key, []]));
     for (const c of cards ?? []) groups.get(c.stage)?.push(c);
     return groups;
   }, [cards]);
 
   async function move(businessId: string, to: PipelineStage) {
+    if (to === "lead") return; // businesses can't enter the standalone Lead column
     const card = cards?.find((c) => c.businessId === businessId);
     if (!card || card.stage === to) return;
     const prev = cards ?? [];
     setCards((cs) => (cs ?? []).map((c) => (c.businessId === businessId ? { ...c, stage: to, stageSource: "manual" } : c)));
     try {
       await pipeline.set(businessId, to, "manual");
-      toast.success(`Moved ${card.name} to ${STAGES.find((s) => s.key === to)?.label}.`);
+      toast.success(`Moved ${card.name} to ${BUSINESS_STAGES.find((s) => s.key === to)?.label}.`);
     } catch (e) {
       setCards(prev);
       toast.error((e as { message?: string })?.message ?? "Couldn't move this business.");
     }
   }
 
+  async function addLead(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    const payload = {
+      name: form.name.trim() || null,
+      contact_name: form.contact_name.trim() || null,
+      contact_email: form.contact_email.trim() || null,
+      contact_phone: form.contact_phone.trim() || null,
+      source: form.source.trim() || null,
+      notes: form.notes.trim() || null,
+    };
+    try {
+      const created = await leads.create(payload);
+      setLeadList((l) => [created, ...(l ?? [])]);
+      setForm(EMPTY_FORM);
+      setAddOpen(false);
+      toast.success("Lead added.");
+    } catch (err) {
+      toast.error((err as { message?: string })?.message ?? "Couldn't add the lead.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function convertLead(lead: CsLead) {
+    const prev = leadList ?? [];
+    setLeadList((l) => (l ?? []).filter((x) => x.id !== lead.id));
+    try {
+      await leads.update(lead.id, { status: "converted" });
+      toast.success(`Marked ${lead.name ?? "lead"} as converted.`);
+    } catch (e) {
+      setLeadList(prev);
+      toast.error((e as { message?: string })?.message ?? "Couldn't convert the lead.");
+    }
+  }
+
+  async function removeLead(lead: CsLead) {
+    if (!window.confirm(`Remove ${lead.name ?? "this lead"}? This can't be undone.`)) return;
+    const prev = leadList ?? [];
+    setLeadList((l) => (l ?? []).filter((x) => x.id !== lead.id));
+    try {
+      await leads.remove(lead.id);
+    } catch (e) {
+      setLeadList(prev);
+      toast.error((e as { message?: string })?.message ?? "Couldn't remove the lead.");
+    }
+  }
+
+  const inputs: { key: keyof typeof EMPTY_FORM; label: string; placeholder: string; type?: string }[] = [
+    { key: "name", label: "Name", placeholder: "Prospect or business name" },
+    { key: "contact_name", label: "Contact name", placeholder: "Person" },
+    { key: "source", label: "Source", placeholder: "Referral, event…" },
+    { key: "contact_email", label: "Email", placeholder: "name@example.com", type: "email" },
+    { key: "contact_phone", label: "Phone", placeholder: "+234…" },
+  ];
+
   return (
     <>
       <PageHeader
         title="Pipeline"
-        subtitle={canMove ? "Lifecycle stages auto-update nightly. Drag a card to pin it manually." : "Lifecycle stages auto-update nightly."}
+        subtitle={
+          canMove
+            ? "Leads are standalone prospects. The other stages auto-update nightly — drag a card to pin it."
+            : "Leads are standalone prospects. The other stages auto-update nightly."
+        }
         action={
-          <Button variant="outline" size="sm" onClick={() => setReloadKey((k) => k + 1)}>
-            <RefreshCw /> Refresh
-          </Button>
+          <div className="flex items-center gap-2">
+            {canMove && (
+              <Button variant="outline" size="sm" onClick={() => setAddOpen((o) => !o)}>
+                <Plus /> Add lead
+              </Button>
+            )}
+            <Button variant="outline" size="sm" onClick={() => setReloadKey((k) => k + 1)}>
+              <RefreshCw /> Refresh
+            </Button>
+          </div>
         }
       />
 
+      {addOpen && canMove && (
+        <form onSubmit={addLead} className="mb-4 rounded-xl border border-border/60 bg-card p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-brand-dark">New lead</h2>
+            <span className="text-xs text-muted-foreground">All fields optional</span>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {inputs.map((f) => (
+              <FormField key={f.key} label={f.label}>
+                <Input
+                  type={f.type ?? "text"}
+                  value={form[f.key]}
+                  onChange={(e) => setForm({ ...form, [f.key]: e.target.value })}
+                  placeholder={f.placeholder}
+                  aria-label={`Lead ${f.label.toLowerCase()}`}
+                />
+              </FormField>
+            ))}
+            <FormField label="Notes">
+              <textarea
+                value={form.notes}
+                onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                placeholder="Context…"
+                aria-label="Lead notes"
+                rows={1}
+                className="min-h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              />
+            </FormField>
+          </div>
+          <div className="mt-3 flex justify-end gap-2">
+            <Button type="button" variant="ghost" size="sm" onClick={() => { setForm(EMPTY_FORM); setAddOpen(false); }}>
+              Cancel
+            </Button>
+            <Button type="submit" variant="brand" size="sm" disabled={saving}>
+              {saving ? "Saving…" : "Save lead"}
+            </Button>
+          </div>
+        </form>
+      )}
+
       {error ? (
         <ErrorState message={error} onRetry={() => setReloadKey((k) => k + 1)} />
-      ) : cards === null ? (
+      ) : cards === null || leadList === null ? (
         <LoadingState label="Loading pipeline…" />
-      ) : cards.length === 0 ? (
-        <EmptyState icon={Workflow} title="No businesses yet" description="Businesses will appear here as they move through the lifecycle." />
       ) : (
         <div className="flex gap-4 overflow-x-auto pb-4">
-          {STAGES.map((s) => {
+          {/* Lead column — standalone prospects (cs_lead). Not a business drop target. */}
+          <div className={cn(columnClass, "border-border/60")}>
+            <div className="flex items-center justify-between border-b border-border/60 px-3 py-2.5">
+              <span className="text-sm font-semibold text-brand-dark">Lead</span>
+              <span className="rounded-full bg-card px-2 py-0.5 text-xs font-medium text-muted-foreground">{leadList.length}</span>
+            </div>
+            <div className="flex min-h-[120px] flex-1 flex-col gap-2 p-2">
+              {leadList.length === 0 ? (
+                <p className="px-2 py-6 text-center text-xs text-muted-foreground">
+                  {canMove ? "No leads yet. Use “Add lead” to track a prospect." : "No leads yet."}
+                </p>
+              ) : (
+                leadList.map((lead) => (
+                  <div key={lead.id} className="rounded-lg border border-border/60 bg-card p-3 shadow-sm">
+                    <div className="font-medium text-brand-dark">{lead.name?.trim() || "Untitled lead"}</div>
+                    {(lead.contact_name || lead.contact_email || lead.contact_phone) && (
+                      <div className="mt-1 space-y-0.5 text-xs text-muted-foreground">
+                        {lead.contact_name && <div className="truncate">{lead.contact_name}</div>}
+                        {lead.contact_email && <div className="truncate">{lead.contact_email}</div>}
+                        {lead.contact_phone && <div className="truncate">{lead.contact_phone}</div>}
+                      </div>
+                    )}
+                    {lead.source && (
+                      <span className="mt-2 inline-flex rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">{lead.source}</span>
+                    )}
+                    {lead.notes && <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">{lead.notes}</p>}
+                    {canMove && (
+                      <div className="mt-3 flex items-center gap-2 border-t border-border/60 pt-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 gap-1 px-2 text-xs"
+                          onClick={() => convertLead(lead)}
+                          aria-label={`Convert ${lead.name ?? "lead"}`}
+                          title="Mark as converted — moves out of the Lead list"
+                        >
+                          <Check className="size-3" /> Convert
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 gap-1 px-2 text-xs text-muted-foreground"
+                          onClick={() => removeLead(lead)}
+                          aria-label={`Remove ${lead.name ?? "lead"}`}
+                        >
+                          <Trash2 className="size-3" /> Remove
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* Business stages — auto-derived nightly; drag a card to pin it. */}
+          {BUSINESS_STAGES.map((s) => {
             const items = byStage.get(s.key) ?? [];
             return (
               <div
                 key={s.key}
-                className={cn(
-                  "flex w-72 shrink-0 flex-col rounded-xl border bg-secondary/30 transition-colors",
-                  overStage === s.key ? "border-brand/50 bg-brand-light/30" : "border-border/60",
-                )}
+                className={cn(columnClass, "transition-colors", overStage === s.key ? "border-brand/50 bg-brand-light/30" : "border-border/60")}
                 onDragOver={(e) => {
                   e.preventDefault();
                   e.dataTransfer.dropEffect = "move";

@@ -291,6 +291,68 @@ export const accountAssignment = {
   },
 };
 
+// ----------------------------------------------------------------------------
+// cs_lead — standalone prospects for the pipeline's Lead column (decoupled from businesses).
+// All fields are optional; status/created_by/timestamps are server-managed.
+// ----------------------------------------------------------------------------
+export type LeadStatus = "open" | "converted" | "lost";
+export type CsLead = {
+  id: string;
+  name: string | null;
+  contact_name: string | null;
+  contact_email: string | null;
+  contact_phone: string | null;
+  source: string | null;
+  notes: string | null;
+  status: LeadStatus;
+  business_id: string | null;
+  created_by: string | null;
+  created_at: Iso;
+  updated_at: Iso;
+};
+export type CsLeadInsert = Partial<{
+  name: string | null;
+  contact_name: string | null;
+  contact_email: string | null;
+  contact_phone: string | null;
+  source: string | null;
+  notes: string | null;
+}>;
+export type CsLeadUpdate = Partial<{
+  name: string | null;
+  contact_name: string | null;
+  contact_email: string | null;
+  contact_phone: string | null;
+  source: string | null;
+  notes: string | null;
+  status: LeadStatus;
+  business_id: string | null;
+}>;
+
+export const leads = {
+  async list(status: LeadStatus | "all" = "open"): Promise<CsLead[]> {
+    let q = supabase.from("cs_lead").select("*").order("created_at", { ascending: false });
+    if (status !== "all") q = q.eq("status", status);
+    const { data, error } = await q;
+    if (error) throw error;
+    return (data ?? []) as CsLead[];
+  },
+  async create(input: CsLeadInsert): Promise<CsLead> {
+    const { data, error } = await supabase.from("cs_lead").insert(input as object).select().single();
+    if (error) throw error;
+    return data as CsLead;
+  },
+  async update(id: string, patch: CsLeadUpdate): Promise<CsLead> {
+    const { data, error } = await supabase.from("cs_lead").update(patch as object).eq("id", id).select().single();
+    if (error) throw error;
+    return data as CsLead;
+  },
+  async remove(id: string): Promise<void> {
+    const { error } = await supabase.from("cs_lead").delete().eq("id", id);
+    if (error) throw error;
+  },
+};
+
 export const pipeline = {
   async get(businessId: string): Promise<CsPipeline | null> {
     const { data, error } = await supabase

@@ -79,6 +79,7 @@ supabase db push
 | 19 | `..627120000_assignable_staff_name` | `admin_list_staff()` prefers the invitee's entered name over the `'Staff'` profile placeholder |
 | 20 | `..627130000_subscription_renewal_sync` | sync `subscriptions` (incl. `current_period_end` renewal) from `businesses.subscription_*` on insert/update |
 | 21 | `..627150000_account_manager_name` | `admin_customers_page` / `admin_pipeline_board` prefer the manager's entered name over the `'Staff'` placeholder |
+| 22 | `..627160000_cs_leads` | `cs_lead` — standalone prospects for the pipeline's Lead column (decoupled from businesses); frees any business pinned to `lead` |
 
 ### Seed the first internal admin
 
