@@ -157,12 +157,24 @@ Changes apply on the next nightly snapshot or any on-demand recompute — no red
 
 ## 6. Deploy
 
-```bash
-npm run deploy        # build + wrangler deploy (Cloudflare Workers, served at the SPA root)
-```
+**Auto-deploy:** every green push to `main` deploys to Cloudflare Workers (CI `deploy` job, after
+lint/types + e2e pass). Manual deploy is still `npm run deploy` (build + `wrangler deploy`, served at
+the SPA root). Config: [`wrangler.jsonc`](wrangler.jsonc).
 
-Set `VITE_SUPABASE_URL` / `VITE_SUPABASE_PUBLISHABLE_KEY` as build-time env in the Cloudflare
-project. Config: [`wrangler.jsonc`](wrangler.jsonc).
+The CI deploy stays a no-op (CI green) until these **repo secrets** are set
+(Settings → Secrets and variables → Actions):
+
+| Secret | What |
+|---|---|
+| `CLOUDFLARE_API_TOKEN` | token with the *Edit Cloudflare Workers* permission |
+| `CLOUDFLARE_ACCOUNT_ID` | the Cloudflare account id |
+| `VITE_SUPABASE_URL` | `https://wnuyzsjhijhnhkpcnnqu.supabase.co` (build-time) |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | the project's publishable/anon key (build-time) |
+
+**Cache busting:** the build stamps the service worker (`public/sw.js`) with the commit SHA
+(`scripts/stamp-sw.mjs`), so each deploy gets a new cache name and the SW's `activate` handler purges
+the previous deploy's cache. Combined with content-hashed asset filenames and the network-first HTML
+strategy, users always get the new build on their next visit — no manual cache clearing.
 
 ---
 

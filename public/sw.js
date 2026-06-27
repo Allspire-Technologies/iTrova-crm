@@ -3,7 +3,10 @@
 // calls (Supabase REST/RPC/Auth) always go straight to the network — never cached — so data
 // is never stale and request mocking/interception is unaffected.
 
-const VERSION = "v1";
+// __BUILD_ID__ is replaced at build time (scripts/stamp-sw.mjs) with the commit SHA, so every
+// deploy gets a new cache name — the activate handler below then purges the previous caches.
+// Falls back to "dev" for un-stamped local builds.
+const VERSION = "__BUILD_ID__";
 const CACHE = `adminos-${VERSION}`;
 const SHELL = ["/", "/index.html", "/manifest.webmanifest", "/icon.svg"];
 
