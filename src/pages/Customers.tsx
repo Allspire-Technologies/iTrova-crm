@@ -545,22 +545,38 @@ export default function Customers() {
                         <div className="truncate font-medium text-brand-dark">{r.name}</div>
                         {r.ownerName && <div className="truncate text-xs text-muted-foreground">{r.ownerName}</div>}
                       </div>
-                      <HealthBadge band={r.healthBand} score={r.healthScore} />
+                      <div className="shrink-0">
+                        <HealthBadge band={r.healthBand} score={r.healthScore} />
+                      </div>
                     </div>
                     <div className="mt-2 flex flex-wrap items-center gap-1.5">
                       <PlanBadge planKey={r.planKey} />
                       <SubscriptionBadge status={r.subscriptionStatus} />
-                      {r.industry && <span className="text-xs text-muted-foreground">· {r.industry}</span>}
                     </div>
-                    <div className="mt-2 grid grid-cols-3 gap-2 text-center text-xs text-muted-foreground">
+                    {/* KPIs grouped, then labelled facts — readable on a narrow card. */}
+                    <div className="mt-3 grid grid-cols-3 gap-2 rounded-lg bg-muted/40 py-2 text-center text-xs text-muted-foreground">
                       <div><span className="block font-medium tabular-nums text-foreground">{r.salesCount}</span>Sales</div>
                       <div><span className="block font-medium tabular-nums text-foreground">{r.productsTotal}</span>Products</div>
                       <div><span className="block font-medium tabular-nums text-foreground">{r.totalUsers}</span>Staff</div>
                     </div>
-                    <div className="mt-2 flex items-center justify-between gap-2 text-xs text-muted-foreground">
-                      <span className="truncate">{r.accountManagerName ?? "Unassigned"}</span>
-                      {r.renewalDate && <span className="shrink-0">Renews {formatDate(r.renewalDate)}</span>}
-                    </div>
+                    <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2.5 text-xs">
+                      <div className="min-w-0">
+                        <dt className="text-muted-foreground">Industry</dt>
+                        <dd className="truncate font-medium text-foreground">{r.industry ?? "—"}</dd>
+                      </div>
+                      <div className="min-w-0">
+                        <dt className="text-muted-foreground">Account manager</dt>
+                        <dd className="truncate font-medium text-foreground">{r.accountManagerName ?? "Unassigned"}</dd>
+                      </div>
+                      <div className="min-w-0">
+                        <dt className="text-muted-foreground">Last login</dt>
+                        <dd className="truncate font-medium text-foreground">{formatRelative(r.lastLogin)}</dd>
+                      </div>
+                      <div className="min-w-0">
+                        <dt className="text-muted-foreground">Renewal</dt>
+                        <dd className="truncate font-medium text-foreground">{r.renewalDate ? formatDate(r.renewalDate) : "—"}</dd>
+                      </div>
+                    </dl>
                   </div>
                 </div>
               </div>
