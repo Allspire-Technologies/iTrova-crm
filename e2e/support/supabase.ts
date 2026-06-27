@@ -95,11 +95,20 @@ const KPI = {
 };
 
 // Current health band (cs_health_current view) — red, so the business is at risk.
+// reasons mirror the real cs_score output: five scoring factors + trip-wire/warning flags.
 const HEALTH = {
   business_id: CUSTOMER.id,
   score: 30,
   band: "red",
-  reasons: ["No login in 21 days", "No sales in 30 days"],
+  reasons: [
+    { rule: "login_recency", points: 10, days: 12 },
+    { rule: "inventory_setup", points: 20, products: 14 },
+    { rule: "sales_activity", points: 0, days: null },
+    { rule: "user_adoption", points: 0, active_users: 0 },
+    { rule: "renewal_posture", points: 0, status: "expired" },
+    { rule: "trip_wire", detail: "no login in 21 days" },
+    { rule: "warning", detail: "no sales in 30 days" },
+  ],
   captured_at: CUSTOMER.created_at,
 };
 

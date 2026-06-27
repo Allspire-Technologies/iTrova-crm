@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { SubscriptionBadge, PlanBadge } from "@/components/SubscriptionBadge";
 import { HealthBadge } from "@/components/HealthBadge";
+import { HealthReasons } from "@/components/HealthReasons";
 import { StatCard } from "@/components/StatCard";
 import { LazyInView } from "@/components/LazyInView";
 import { Sparkline } from "@/components/charts/Charts";
@@ -37,18 +38,6 @@ const STAGE_LABELS: Record<PipelineStage, string> = {
 };
 
 type Health = { score: number; band: HealthBand; reasons: unknown } | null;
-
-function reasonList(reasons: unknown): string[] {
-  if (!Array.isArray(reasons)) return [];
-  return reasons.map((r) => {
-    if (typeof r === "string") return r;
-    if (r && typeof r === "object") {
-      const o = r as Record<string, unknown>;
-      return String(o.label ?? o.reason ?? o.message ?? JSON.stringify(o));
-    }
-    return String(r);
-  });
-}
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -135,7 +124,6 @@ export default function CustomerDetail() {
 
   const sub = data.subscription;
   const owner = data.team.find((m) => m.isOwner);
-  const reasons = reasonList(health?.reasons);
 
   return (
     <>
@@ -178,16 +166,7 @@ export default function CustomerDetail() {
                 />
               </div>
             )}
-            {reasons.length > 0 && (
-              <div className="mt-5 border-t border-border/60 pt-4">
-                <p className="text-xs uppercase tracking-wide text-muted-foreground">Health reasons</p>
-                <ul className="mt-2 list-inside list-disc space-y-1 text-sm text-foreground">
-                  {reasons.map((r, i) => (
-                    <li key={i}>{r}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
+            <HealthReasons reasons={health?.reasons} />
           </CardContent>
         </Card>
 
