@@ -15,7 +15,7 @@ export function HealthBadge({ band, score }: { band: HealthBand | null; score?: 
   if (!band) return <span className="text-muted-foreground">—</span>;
   const b = BAND[band];
   return (
-    <Badge variant="outline" className={cn("gap-1.5 border-transparent", b.pill)}>
+    <Badge variant="outline" className={cn("gap-1.5 whitespace-nowrap border-transparent", b.pill)}>
       <span className={cn("size-1.5 rounded-full", b.dot)} aria-hidden />
       {b.label}
       {score != null && <span className="tabular-nums opacity-70">· {score}</span>}
