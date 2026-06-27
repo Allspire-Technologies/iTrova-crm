@@ -76,6 +76,8 @@ supabase db push
 | 16 | `..240000_staff_roles` | `cs_staff_role` + capability helpers + role-aware `cs_*` RLS (§3) |
 | 17 | `..250000_role_scoped_reads` | role-scope the read RPCs (Support → assigned) + gate revenue |
 | 18 | `..627110000_subscriptions_active_for_all` | active `subscriptions` row for every business (incl. Free), via backfill + new-business trigger |
+| 19 | `..627120000_assignable_staff_name` | `admin_list_staff()` prefers the invitee's entered name over the `'Staff'` profile placeholder |
+| 20 | `..627130000_subscription_renewal_sync` | sync `subscriptions` (incl. `current_period_end` renewal) from `businesses.subscription_*` on insert/update |
 
 ### Seed the first internal admin
 
