@@ -286,9 +286,27 @@ const BOARD = [
   },
 ];
 
+// One standalone prospect for the Lead column (cs_lead) — decoupled from businesses.
+export const LEAD = {
+  id: "ffff0000-0000-0000-0000-0000000000aa",
+  name: "Prospect Foods Ltd",
+  contact_name: "Bola Ade",
+  contact_email: "bola@prospect.example",
+  contact_phone: null,
+  source: "Referral",
+  notes: null,
+  status: "open",
+  business_id: null,
+  created_by: null,
+  created_at: CUSTOMER.created_at,
+  updated_at: CUSTOMER.created_at,
+};
+
 export async function stubPipeline(page: Page) {
   await page.route("**/rest/v1/rpc/admin_pipeline_board**", (r) => json(r, BOARD));
   await page.route("**/rest/v1/cs_pipeline**", (r) => json(r, [PIPELINE]));
+  // cs_lead: array for the list (GET), single object for create/convert (.single()).
+  await page.route("**/rest/v1/cs_lead**", (r) => json(r, r.request().method() === "GET" ? [LEAD] : LEAD));
 }
 
 // Tasks queue (§7.7).
