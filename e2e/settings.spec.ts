@@ -59,7 +59,9 @@ test.describe("Settings (§3/§8)", () => {
     await page.getByLabel("New staff email").fill("newbie@allspire.tech");
     await page.getByLabel("New staff role").selectOption("support");
     await page.getByRole("button", { name: "Generate invite link" }).click();
-    await expect(page.getByLabel("Invite link")).toHaveValue(/set-password/);
+    // exact: true — otherwise this also matches the pending row's "Copy invite link for …" button
+    // (substring), which races the async roles list and intermittently fails CI.
+    await expect(page.getByLabel("Invite link", { exact: true })).toHaveValue(/set-password/);
   });
 
   test("admin can copy a fresh link for a pending invite", async ({ page }) => {
