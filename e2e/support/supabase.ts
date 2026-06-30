@@ -305,8 +305,16 @@ export const LEAD = {
 export async function stubPipeline(page: Page) {
   await page.route("**/rest/v1/rpc/admin_pipeline_board**", (r) => json(r, BOARD));
   await page.route("**/rest/v1/cs_pipeline**", (r) => json(r, [PIPELINE]));
-  // cs_lead: array for the list (GET), single object for create/convert (.single()).
-  await page.route("**/rest/v1/cs_lead**", (r) => json(r, r.request().method() === "GET" ? [LEAD] : LEAD));
+  // cs_lead: array for the list (GET); for create/convert/edit (.single()) echo the sent fields
+  // merged onto the base lead, so PATCH actually reflects e.g. status:"converted".
+  await page.route("**/rest/v1/cs_lead**", (r) => {
+    const method = r.request().method();
+    if (method === "GET") return json(r, [LEAD]);
+    if (method === "DELETE") return json(r, []);
+    let sent: Record<string, unknown> = {};
+    try { sent = JSON.parse(r.request().postData() || "{}"); } catch { /* keep {} */ }
+    return json(r, { ...LEAD, ...sent });
+  });
 }
 
 // Tasks queue (§7.7).

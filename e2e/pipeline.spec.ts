@@ -34,13 +34,91 @@ test.describe("Customer Success Pipeline (§7.6)", () => {
     await post;
   });
 
-  test("admin can convert a lead (writes cs_lead status)", async ({ page }) => {
+  test("converting a lead confirms first, then keeps the card with a Converted badge", async ({ page }) => {
     await signIn(page, { staff: true });
     await stubPipeline(page);
     await page.goto("/pipeline");
 
-    const patch = page.waitForRequest((r) => r.url().includes("/rest/v1/cs_lead") && r.method() === "PATCH");
+    // Convert opens a confirm dialog and does NOT write until confirmed.
+    let converted = false;
+    page.on("request", (r) => {
+      if (r.url().includes("/rest/v1/cs_lead") && r.method() === "PATCH") converted = true;
+    });
     await page.getByRole("button", { name: `Convert ${LEAD.name}` }).click();
+    await expect(page.getByRole("alertdialog")).toBeVisible();
+    expect(converted).toBe(false);
+
+    const patch = page.waitForRequest((r) => r.url().includes("/rest/v1/cs_lead") && r.method() === "PATCH");
+    await page.getByRole("button", { name: "Mark converted" }).click();
+    await patch;
+
+    // The card stays put; only the Convert button is replaced by a Converted badge.
+    // (exact match avoids colliding with the "Marked … as converted" toast.)
+    await expect(page.getByText(LEAD.name, { exact: true })).toBeVisible();
+    await expect(page.getByText("Converted", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: `Convert ${LEAD.name}` })).toHaveCount(0);
+  });
+
+  test("editing a converted lead can revert it back to open", async ({ page }) => {
+    await signIn(page, { staff: true });
+    await stubPipeline(page);
+    await page.goto("/pipeline");
+
+    // Convert first so the card is in the converted state.
+    await page.getByRole("button", { name: `Convert ${LEAD.name}` }).click();
+    await page.getByRole("button", { name: "Mark converted" }).click();
+    await expect(page.getByText("Converted", { exact: true })).toBeVisible();
+
+    // Edit → the revert toggle is offered only for converted leads.
+    await page.getByRole("button", { name: `Edit ${LEAD.name}` }).click();
+    const revert = page.getByLabel("Revert to open lead");
+    await expect(revert).toBeVisible();
+    await revert.check();
+
+    const patch = page.waitForRequest(
+      (r) => r.url().includes("/rest/v1/cs_lead") && r.method() === "PATCH" && (r.postData() ?? "").includes('"status":"open"'),
+    );
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await patch;
+
+    // Back to open: the Converted badge is gone and Convert is available again.
+    await expect(page.getByText("Converted", { exact: true })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: `Convert ${LEAD.name}` })).toBeVisible();
+  });
+
+  test("removing a lead asks for confirmation before deleting", async ({ page }) => {
+    await signIn(page, { staff: true });
+    await stubPipeline(page);
+    await page.goto("/pipeline");
+
+    // Clicking Remove opens a confirm dialog and does NOT delete on its own.
+    let deleted = false;
+    await page.route("**/rest/v1/cs_lead**", (r) => {
+      if (r.request().method() === "DELETE") deleted = true;
+      return r.fulfill({ status: 200, contentType: "application/json", body: "[]" });
+    });
+    await page.getByRole("button", { name: `Remove ${LEAD.name}` }).click();
+    await expect(page.getByRole("alertdialog")).toBeVisible();
+    expect(deleted).toBe(false);
+
+    const del = page.waitForRequest((r) => r.url().includes("/rest/v1/cs_lead") && r.method() === "DELETE");
+    await page.getByRole("button", { name: "Remove lead" }).click();
+    await del;
+    expect(deleted).toBe(true);
+  });
+
+  test("admin can edit a lead (writes cs_lead fields)", async ({ page }) => {
+    await signIn(page, { staff: true });
+    await stubPipeline(page);
+    await page.goto("/pipeline");
+
+    await page.getByRole("button", { name: `Edit ${LEAD.name}` }).click();
+    const nameField = page.getByLabel("Edit lead name");
+    await expect(nameField).toHaveValue(LEAD.name);
+    await nameField.fill("Renamed Prospect Co");
+
+    const patch = page.waitForRequest((r) => r.url().includes("/rest/v1/cs_lead") && r.method() === "PATCH");
+    await page.getByRole("button", { name: "Save", exact: true }).click();
     await patch;
   });
 
