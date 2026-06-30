@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { HealthBadge } from "@/components/HealthBadge";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { getPipelineBoard, type PipelineCard } from "@/lib/admin";
-import { pipeline, leads, type CsLead, type PipelineStage } from "@/lib/cs";
+import { pipeline, leads, type CsLead, type CsLeadUpdate, type PipelineStage } from "@/lib/cs";
 import { useAuth } from "@/contexts/AuthContext";
 import { roleCanWrite } from "@/lib/roles";
 import { formatDate } from "@/lib/format";
@@ -57,12 +57,16 @@ export default function Pipeline() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
 
-  // Inline edit of an existing lead (same fields as the add form).
+  // Inline edit of an existing lead (same fields as the add form). `editRevert` un-converts a
+  // converted lead back to "open" on save (the toggle is only shown for converted leads).
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState(EMPTY_FORM);
+  const [editRevert, setEditRevert] = useState(false);
   const [savingEdit, setSavingEdit] = useState(false);
 
-  // Confirmation for the only destructive lead action (delete).
+  // Confirmations for the lead actions that change/remove a card.
+  const [convertingLead, setConvertingLead] = useState<CsLead | null>(null);
+  const [converting, setConverting] = useState(false);
   const [removingLead, setRemovingLead] = useState<CsLead | null>(null);
   const [removing, setRemoving] = useState(false);
 
@@ -131,6 +135,7 @@ export default function Pipeline() {
 
   function startEdit(lead: CsLead) {
     setEditingId(lead.id);
+    setEditRevert(false);
     setEditForm({
       name: lead.name ?? "",
       contact_name: lead.contact_name ?? "",
@@ -145,8 +150,9 @@ export default function Pipeline() {
     e.preventDefault();
     if (!editingId) return;
     const id = editingId;
+    const lead = (leadList ?? []).find((x) => x.id === id);
     setSavingEdit(true);
-    const payload = {
+    const payload: CsLeadUpdate = {
       name: editForm.name.trim() || null,
       contact_name: editForm.contact_name.trim() || null,
       contact_email: editForm.contact_email.trim() || null,
@@ -154,6 +160,8 @@ export default function Pipeline() {
       source: editForm.source.trim() || null,
       notes: editForm.notes.trim() || null,
     };
+    // Un-convert: only meaningful (and only offered) for a currently-converted lead.
+    if (lead?.status === "converted" && editRevert) payload.status = "open";
     try {
       const updated = await leads.update(id, payload);
       setLeadList((l) => (l ?? []).map((x) => (x.id === id ? updated : x)));
@@ -166,9 +174,12 @@ export default function Pipeline() {
     }
   }
 
-  // Convert marks the lead converted but keeps it in the column (status badge flips); it only
-  // leaves when explicitly removed.
-  async function convertLead(lead: CsLead) {
+  // Convert (after confirming) marks the lead converted but keeps it in the column (status badge
+  // flips); it only leaves when explicitly removed. To undo, edit the lead and toggle revert.
+  async function confirmConvert() {
+    const lead = convertingLead;
+    if (!lead) return;
+    setConverting(true);
     const prev = leadList ?? [];
     setLeadList((l) => (l ?? []).map((x) => (x.id === lead.id ? { ...x, status: "converted" } : x)));
     try {
@@ -178,6 +189,9 @@ export default function Pipeline() {
     } catch (e) {
       setLeadList(prev);
       toast.error((e as { message?: string })?.message ?? "Couldn't convert the lead.");
+    } finally {
+      setConverting(false);
+      setConvertingLead(null);
     }
   }
 
@@ -271,6 +285,16 @@ export default function Pipeline() {
       )}
 
       <ConfirmDialog
+        open={convertingLead !== null}
+        onOpenChange={(o) => { if (!o && !converting) setConvertingLead(null); }}
+        title={`Convert ${convertingLead?.name?.trim() || "this lead"}?`}
+        description="Marks the lead as converted. The card stays in the Lead column with a Converted badge — you can revert it later by editing the lead."
+        confirmLabel="Mark converted"
+        busy={converting}
+        onConfirm={confirmConvert}
+      />
+
+      <ConfirmDialog
         open={removingLead !== null}
         onOpenChange={(o) => { if (!o && !removing) setRemovingLead(null); }}
         title={`Remove ${removingLead?.name?.trim() || "this lead"}?`}
@@ -323,6 +347,18 @@ export default function Pipeline() {
                           className="min-h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                         />
                       </FormField>
+                      {lead.status === "converted" && (
+                        <label className="flex items-center gap-2 rounded-md bg-secondary/40 px-2 py-1.5 text-xs text-muted-foreground">
+                          <input
+                            type="checkbox"
+                            checked={editRevert}
+                            onChange={(e) => setEditRevert(e.target.checked)}
+                            aria-label="Revert to open lead"
+                            className="size-3.5 accent-brand"
+                          />
+                          Revert to open lead (un-convert)
+                        </label>
+                      )}
                       <div className="flex justify-end gap-2 pt-1">
                         <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => setEditingId(null)}>
                           Cancel
@@ -360,7 +396,7 @@ export default function Pipeline() {
                               variant="outline"
                               size="sm"
                               className="h-7 gap-1 px-2 text-xs"
-                              onClick={() => convertLead(lead)}
+                              onClick={() => setConvertingLead(lead)}
                               aria-label={`Convert ${lead.name ?? "lead"}`}
                               title="Mark as converted — the card stays here until you remove it"
                             >
