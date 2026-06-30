@@ -222,7 +222,8 @@ export default function Pipeline() {
   ];
 
   return (
-    <>
+    // Fill the shell's content height so the board fits the screen and cards scroll per-column.
+    <div className="flex h-full flex-col">
       <PageHeader
         title="Pipeline"
         subtitle={
@@ -310,14 +311,14 @@ export default function Pipeline() {
       ) : cards === null || leadList === null ? (
         <LoadingState label="Loading pipeline…" />
       ) : (
-        <div className="flex gap-4 overflow-x-auto pb-4">
+        <div data-testid="pipeline-board" className="flex min-h-0 flex-1 gap-4 overflow-x-auto pb-4">
           {/* Lead column — standalone prospects (cs_lead). Not a business drop target. */}
           <div className={cn(columnClass, "border-border/60")}>
-            <div className="flex items-center justify-between border-b border-border/60 px-3 py-2.5">
+            <div className="flex shrink-0 items-center justify-between border-b border-border/60 px-3 py-2.5">
               <span className="text-sm font-semibold text-brand-dark">Lead</span>
               <span className="rounded-full bg-card px-2 py-0.5 text-xs font-medium text-muted-foreground">{leadList.length}</span>
             </div>
-            <div className="flex min-h-[120px] flex-1 flex-col gap-2 p-2">
+            <div data-testid="lead-list" className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-2">
               {leadList.length === 0 ? (
                 <p className="px-2 py-6 text-center text-xs text-muted-foreground">
                   {canMove ? "No leads yet. Use “Add lead” to track a prospect." : "No leads yet."}
@@ -453,12 +454,12 @@ export default function Pipeline() {
                   if (id) move(id, s.key);
                 }}
               >
-                <div className="flex items-center justify-between border-b border-border/60 px-3 py-2.5">
+                <div className="flex shrink-0 items-center justify-between border-b border-border/60 px-3 py-2.5">
                   <span className="text-sm font-semibold text-brand-dark">{s.label}</span>
                   <span className="rounded-full bg-card px-2 py-0.5 text-xs font-medium text-muted-foreground">{items.length}</span>
                 </div>
 
-                <div className="flex min-h-[120px] flex-1 flex-col gap-2 p-2">
+                <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-2">
                   {items.map((c) => (
                     <div
                       key={c.businessId}
@@ -506,6 +507,6 @@ export default function Pipeline() {
           })}
         </div>
       )}
-    </>
+    </div>
   );
 }

@@ -22,6 +22,26 @@ test.describe("Customer Success Pipeline (§7.6)", () => {
     await expect(page.getByText(LEAD.name)).toBeVisible();
   });
 
+  test("the board fits the viewport and cards scroll within each column", async ({ page }) => {
+    await signIn(page, { staff: true });
+    await stubPipeline(page);
+    await page.goto("/pipeline");
+
+    const board = page.getByTestId("pipeline-board");
+    await expect(board).toBeVisible();
+
+    // The board fills the screen but does not push the page past the viewport: its bottom edge
+    // sits within the window (so the whole page does not scroll vertically).
+    const viewport = page.viewportSize()!;
+    const box = (await board.boundingBox())!;
+    expect(box.height).toBeGreaterThan(200);
+    expect(box.y + box.height).toBeLessThanOrEqual(viewport.height + 1);
+
+    // Cards scroll inside the column, not the page: the list is its own vertical scroll area.
+    const overflowY = await page.getByTestId("lead-list").evaluate((el) => getComputedStyle(el).overflowY);
+    expect(overflowY).toBe("auto");
+  });
+
   test("admin can add a standalone lead (writes cs_lead)", async ({ page }) => {
     await signIn(page, { staff: true });
     await stubPipeline(page);
