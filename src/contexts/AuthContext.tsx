@@ -24,13 +24,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [role, setRole] = useState<StaffRole | null>(null);
 
   useEffect(() => {
+    // Keep the `user` reference stable across token refreshes / tab refocus. Supabase fires
+    // onAuthStateChange (TOKEN_REFRESHED, hourly via autoRefreshToken, and on window focus) with
+    // a fresh session+user object for the SAME user. Re-using the previous `user` when the id is
+    // unchanged stops the staff-check effect below from re-running and blanking isStaff/role —
+    // which otherwise flashes the whole app back to "Checking access…" (a phantom page refresh).
+    const adoptUser = (sess: Session | null) =>
+      setUser((prev) => (prev?.id === sess?.user?.id ? prev : sess?.user ?? null));
     const { data: sub } = supabase.auth.onAuthStateChange((_event, sess) => {
       setSession(sess);
-      setUser(sess?.user ?? null);
+      adoptUser(sess);
     });
     supabase.auth.getSession().then(({ data: { session: sess } }) => {
       setSession(sess);
-      setUser(sess?.user ?? null);
+      adoptUser(sess);
       setLoading(false);
     });
     return () => sub.subscription.unsubscribe();

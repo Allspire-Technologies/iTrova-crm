@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { CalendarClock, Check, GripVertical, Pin, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { CalendarClock, Check, GripVertical, Pencil, Pin, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/PageHeader";
 import { LoadingState } from "@/components/states/LoadingState";
@@ -8,6 +8,7 @@ import { ErrorState } from "@/components/states/ErrorState";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { HealthBadge } from "@/components/HealthBadge";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { getPipelineBoard, type PipelineCard } from "@/lib/admin";
 import { pipeline, leads, type CsLead, type PipelineStage } from "@/lib/cs";
 import { useAuth } from "@/contexts/AuthContext";
@@ -56,12 +57,22 @@ export default function Pipeline() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
 
+  // Inline edit of an existing lead (same fields as the add form).
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState(EMPTY_FORM);
+  const [savingEdit, setSavingEdit] = useState(false);
+
+  // Confirmation for the only destructive lead action (delete).
+  const [removingLead, setRemovingLead] = useState<CsLead | null>(null);
+  const [removing, setRemoving] = useState(false);
+
   useEffect(() => {
     let cancelled = false;
     setCards(null);
     setLeadList(null);
     setError(null);
-    Promise.all([getPipelineBoard(), leads.list("open")])
+    // Open AND converted leads stay in the Lead column; a card only leaves when it's deleted.
+    Promise.all([getPipelineBoard(), leads.list("all")])
       .then(([c, l]) => {
         if (cancelled) return;
         setCards(c);
@@ -118,11 +129,51 @@ export default function Pipeline() {
     }
   }
 
+  function startEdit(lead: CsLead) {
+    setEditingId(lead.id);
+    setEditForm({
+      name: lead.name ?? "",
+      contact_name: lead.contact_name ?? "",
+      contact_email: lead.contact_email ?? "",
+      contact_phone: lead.contact_phone ?? "",
+      source: lead.source ?? "",
+      notes: lead.notes ?? "",
+    });
+  }
+
+  async function saveEdit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editingId) return;
+    const id = editingId;
+    setSavingEdit(true);
+    const payload = {
+      name: editForm.name.trim() || null,
+      contact_name: editForm.contact_name.trim() || null,
+      contact_email: editForm.contact_email.trim() || null,
+      contact_phone: editForm.contact_phone.trim() || null,
+      source: editForm.source.trim() || null,
+      notes: editForm.notes.trim() || null,
+    };
+    try {
+      const updated = await leads.update(id, payload);
+      setLeadList((l) => (l ?? []).map((x) => (x.id === id ? updated : x)));
+      setEditingId(null);
+      toast.success("Lead updated.");
+    } catch (err) {
+      toast.error((err as { message?: string })?.message ?? "Couldn't update the lead.");
+    } finally {
+      setSavingEdit(false);
+    }
+  }
+
+  // Convert marks the lead converted but keeps it in the column (status badge flips); it only
+  // leaves when explicitly removed.
   async function convertLead(lead: CsLead) {
     const prev = leadList ?? [];
-    setLeadList((l) => (l ?? []).filter((x) => x.id !== lead.id));
+    setLeadList((l) => (l ?? []).map((x) => (x.id === lead.id ? { ...x, status: "converted" } : x)));
     try {
-      await leads.update(lead.id, { status: "converted" });
+      const updated = await leads.update(lead.id, { status: "converted" });
+      setLeadList((l) => (l ?? []).map((x) => (x.id === lead.id ? updated : x)));
       toast.success(`Marked ${lead.name ?? "lead"} as converted.`);
     } catch (e) {
       setLeadList(prev);
@@ -130,15 +181,21 @@ export default function Pipeline() {
     }
   }
 
-  async function removeLead(lead: CsLead) {
-    if (!window.confirm(`Remove ${lead.name ?? "this lead"}? This can't be undone.`)) return;
+  async function confirmRemove() {
+    const lead = removingLead;
+    if (!lead) return;
+    setRemoving(true);
     const prev = leadList ?? [];
     setLeadList((l) => (l ?? []).filter((x) => x.id !== lead.id));
     try {
       await leads.remove(lead.id);
+      toast.success(`Removed ${lead.name ?? "lead"}.`);
     } catch (e) {
       setLeadList(prev);
       toast.error((e as { message?: string })?.message ?? "Couldn't remove the lead.");
+    } finally {
+      setRemoving(false);
+      setRemovingLead(null);
     }
   }
 
@@ -213,6 +270,17 @@ export default function Pipeline() {
         </form>
       )}
 
+      <ConfirmDialog
+        open={removingLead !== null}
+        onOpenChange={(o) => { if (!o && !removing) setRemovingLead(null); }}
+        title={`Remove ${removingLead?.name?.trim() || "this lead"}?`}
+        description="This permanently deletes the lead and its details. This can't be undone."
+        confirmLabel="Remove lead"
+        variant="danger"
+        busy={removing}
+        onConfirm={confirmRemove}
+      />
+
       {error ? (
         <ErrorState message={error} onRetry={() => setReloadKey((k) => k + 1)} />
       ) : cards === null || leadList === null ? (
@@ -231,45 +299,97 @@ export default function Pipeline() {
                   {canMove ? "No leads yet. Use “Add lead” to track a prospect." : "No leads yet."}
                 </p>
               ) : (
-                leadList.map((lead) => (
-                  <div key={lead.id} className="rounded-lg border border-border/60 bg-card p-3 shadow-sm">
-                    <div className="font-medium text-brand-dark">{lead.name?.trim() || "Untitled lead"}</div>
-                    {(lead.contact_name || lead.contact_email || lead.contact_phone) && (
-                      <div className="mt-1 space-y-0.5 text-xs text-muted-foreground">
-                        {lead.contact_name && <div className="truncate">{lead.contact_name}</div>}
-                        {lead.contact_email && <div className="truncate">{lead.contact_email}</div>}
-                        {lead.contact_phone && <div className="truncate">{lead.contact_phone}</div>}
-                      </div>
-                    )}
-                    {lead.source && (
-                      <span className="mt-2 inline-flex rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">{lead.source}</span>
-                    )}
-                    {lead.notes && <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">{lead.notes}</p>}
-                    {canMove && (
-                      <div className="mt-3 flex items-center gap-2 border-t border-border/60 pt-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-7 gap-1 px-2 text-xs"
-                          onClick={() => convertLead(lead)}
-                          aria-label={`Convert ${lead.name ?? "lead"}`}
-                          title="Mark as converted — moves out of the Lead list"
-                        >
-                          <Check className="size-3" /> Convert
+                leadList.map((lead) =>
+                  canMove && editingId === lead.id ? (
+                    <form key={lead.id} onSubmit={saveEdit} className="space-y-2 rounded-lg border border-brand/40 bg-card p-3 shadow-sm">
+                      {inputs.map((f) => (
+                        <FormField key={f.key} label={f.label}>
+                          <Input
+                            type={f.type ?? "text"}
+                            value={editForm[f.key]}
+                            onChange={(e) => setEditForm({ ...editForm, [f.key]: e.target.value })}
+                            placeholder={f.placeholder}
+                            aria-label={`Edit lead ${f.label.toLowerCase()}`}
+                          />
+                        </FormField>
+                      ))}
+                      <FormField label="Notes">
+                        <textarea
+                          value={editForm.notes}
+                          onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })}
+                          placeholder="Context…"
+                          aria-label="Edit lead notes"
+                          rows={2}
+                          className="min-h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        />
+                      </FormField>
+                      <div className="flex justify-end gap-2 pt-1">
+                        <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => setEditingId(null)}>
+                          Cancel
                         </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 gap-1 px-2 text-xs text-muted-foreground"
-                          onClick={() => removeLead(lead)}
-                          aria-label={`Remove ${lead.name ?? "lead"}`}
-                        >
-                          <Trash2 className="size-3" /> Remove
+                        <Button type="submit" variant="brand" size="sm" className="h-7 px-2 text-xs" disabled={savingEdit}>
+                          {savingEdit ? "Saving…" : "Save"}
                         </Button>
                       </div>
-                    )}
-                  </div>
-                ))
+                    </form>
+                  ) : (
+                    <div key={lead.id} className="rounded-lg border border-border/60 bg-card p-3 shadow-sm">
+                      <div className="flex items-start justify-between gap-2">
+                        <span className="font-medium text-brand-dark">{lead.name?.trim() || "Untitled lead"}</span>
+                        {lead.status === "converted" && (
+                          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-success/10 px-2 py-0.5 text-xs font-medium text-success">
+                            <Check className="size-3" /> Converted
+                          </span>
+                        )}
+                      </div>
+                      {(lead.contact_name || lead.contact_email || lead.contact_phone) && (
+                        <div className="mt-1 space-y-0.5 text-xs text-muted-foreground">
+                          {lead.contact_name && <div className="truncate">{lead.contact_name}</div>}
+                          {lead.contact_email && <div className="truncate">{lead.contact_email}</div>}
+                          {lead.contact_phone && <div className="truncate">{lead.contact_phone}</div>}
+                        </div>
+                      )}
+                      {lead.source && (
+                        <span className="mt-2 inline-flex rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">{lead.source}</span>
+                      )}
+                      {lead.notes && <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">{lead.notes}</p>}
+                      {canMove && (
+                        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border/60 pt-2">
+                          {lead.status !== "converted" && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-7 gap-1 px-2 text-xs"
+                              onClick={() => convertLead(lead)}
+                              aria-label={`Convert ${lead.name ?? "lead"}`}
+                              title="Mark as converted — the card stays here until you remove it"
+                            >
+                              <Check className="size-3" /> Convert
+                            </Button>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 gap-1 px-2 text-xs text-muted-foreground"
+                            onClick={() => startEdit(lead)}
+                            aria-label={`Edit ${lead.name ?? "lead"}`}
+                          >
+                            <Pencil className="size-3" /> Edit
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 gap-1 px-2 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
+                            onClick={() => setRemovingLead(lead)}
+                            aria-label={`Remove ${lead.name ?? "lead"}`}
+                          >
+                            <Trash2 className="size-3" /> Remove
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  ),
+                )
               )}
             </div>
           </div>
