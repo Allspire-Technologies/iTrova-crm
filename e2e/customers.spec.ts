@@ -85,6 +85,10 @@ test.describe("Customer Overview (§7.2)", () => {
     const dialog = page.getByRole("alertdialog");
     await expect(dialog.getByText(`Delete ${CUSTOMER.name}?`)).toBeVisible();
 
+    // Confirm stays disabled until the business name is typed exactly.
+    await expect(dialog.getByRole("button", { name: "Delete business" })).toBeDisabled();
+    await dialog.getByRole("textbox").fill(CUSTOMER.name);
+
     const del = page.waitForRequest(
       (r) =>
         r.url().includes("/rest/v1/rpc/admin_delete_business") &&
@@ -103,6 +107,7 @@ test.describe("Customer Overview (§7.2)", () => {
     await page.getByRole("button", { name: "Delete business" }).click();
     const dialog = page.getByRole("alertdialog");
     await expect(dialog.getByText(`Delete ${CUSTOMER.name}?`)).toBeVisible();
+    await dialog.getByRole("textbox").fill(CUSTOMER.name);
 
     const del = page.waitForRequest(
       (r) =>
