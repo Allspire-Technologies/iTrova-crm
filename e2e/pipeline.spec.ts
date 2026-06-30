@@ -91,11 +91,14 @@ test.describe("Customer Success Pipeline (§7.6)", () => {
     await stubPipeline(page);
     await page.goto("/pipeline");
 
-    // Clicking Remove opens a confirm dialog and does NOT delete on its own.
+    // Clicking Remove opens a confirm dialog and does NOT delete on its own. This route still
+    // serves [LEAD] for the list GET (which may race the override in CI) so the card always
+    // renders; only DELETE is tracked.
     let deleted = false;
     await page.route("**/rest/v1/cs_lead**", (r) => {
-      if (r.request().method() === "DELETE") deleted = true;
-      return r.fulfill({ status: 200, contentType: "application/json", body: "[]" });
+      const method = r.request().method();
+      if (method === "DELETE") deleted = true;
+      return r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(method === "GET" ? [LEAD] : []) });
     });
     await page.getByRole("button", { name: `Remove ${LEAD.name}` }).click();
     await expect(page.getByRole("alertdialog")).toBeVisible();
