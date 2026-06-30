@@ -73,4 +73,54 @@ test.describe("Customer Overview (§7.2)", () => {
     await page.getByRole("button", { name: "Apply" }).click();
     await write;
   });
+
+  test("admin deletes a business after confirming (calls admin_delete_business)", async ({ page }) => {
+    await signIn(page, { staff: true }); // default staff role is admin
+    await stubCustomers(page);
+    await page.goto("/customers");
+    await expect(page.getByRole("row", { name: new RegExp(CUSTOMER.name) })).toBeVisible();
+
+    // Clicking delete opens a confirmation first — it does not delete immediately.
+    await page.getByRole("button", { name: `Delete ${CUSTOMER.name}` }).first().click();
+    const dialog = page.getByRole("alertdialog");
+    await expect(dialog.getByText(`Delete ${CUSTOMER.name}?`)).toBeVisible();
+
+    const del = page.waitForRequest(
+      (r) =>
+        r.url().includes("/rest/v1/rpc/admin_delete_business") &&
+        (r.postData() ?? "").includes(CUSTOMER.id),
+    );
+    await dialog.getByRole("button", { name: "Delete business" }).click();
+    await del;
+  });
+
+  test("admin deletes from the detail page (calls RPC, returns to the list)", async ({ page }) => {
+    await signIn(page, { staff: true });
+    await stubCustomers(page);
+    await page.goto(`/customers/${CUSTOMER.id}`);
+    await expect(page.getByRole("heading", { name: CUSTOMER.name })).toBeVisible();
+
+    await page.getByRole("button", { name: "Delete business" }).click();
+    const dialog = page.getByRole("alertdialog");
+    await expect(dialog.getByText(`Delete ${CUSTOMER.name}?`)).toBeVisible();
+
+    const del = page.waitForRequest(
+      (r) =>
+        r.url().includes("/rest/v1/rpc/admin_delete_business") &&
+        (r.postData() ?? "").includes(CUSTOMER.id),
+    );
+    await dialog.getByRole("button", { name: "Delete business" }).click();
+    await del;
+    await expect(page).toHaveURL(/\/customers$/);
+  });
+
+  test("non-admin staff cannot see the delete action", async ({ page }) => {
+    await signIn(page, { staff: true, role: "support" });
+    await stubCustomers(page);
+    await page.goto("/customers");
+    await expect(page.getByRole("row", { name: new RegExp(CUSTOMER.name) })).toBeVisible();
+
+    await expect(page.getByRole("columnheader", { name: "Delete" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /^Delete / })).toHaveCount(0);
+  });
 });

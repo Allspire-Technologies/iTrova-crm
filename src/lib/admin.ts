@@ -216,3 +216,10 @@ export async function getCustomersFacets(): Promise<CustomersFacets> {
     : [];
   return { plans: asStrings(r.plans), industries: asStrings(r.industries), managers };
 }
+
+/** Permanently delete a business and all its data (Management/Admin only). Runs through a
+ *  SECURITY DEFINER RPC gated on cs_is_admin(); FK cascades remove the tenant's rows. */
+export async function deleteBusiness(businessId: string): Promise<void> {
+  const { error } = await supabase.rpc("admin_delete_business", { p_business_id: businessId });
+  if (error) throw error;
+}
