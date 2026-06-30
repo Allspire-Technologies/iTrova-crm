@@ -108,7 +108,7 @@ export default function AppShell() {
   );
 
   return (
-    <div className="flex min-h-screen bg-gradient-soft">
+    <div className="flex h-screen overflow-hidden bg-gradient-soft">
       {/* Desktop sidebar */}
       <aside
         className={cn(
@@ -167,7 +167,7 @@ export default function AppShell() {
 
       {/* Main */}
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-10 border-b border-border bg-background/80 backdrop-blur">
+        <header className="z-10 shrink-0 border-b border-border bg-background/80 backdrop-blur">
           <div className="flex h-16 items-center gap-2 px-4 lg:px-8">
             <button
               onClick={() => setMobileOpen(true)}
@@ -181,10 +181,13 @@ export default function AppShell() {
             <div className="max-w-[160px] truncate text-sm text-muted-foreground sm:max-w-[200px]">{user?.email}</div>
           </div>
         </header>
-        <main className="flex-1 animate-fade-in p-4 lg:p-8">
+        {/* The shell is a fixed viewport-height column (h-screen above); this is the only
+            vertical scroll container. Pages are h-full, so a page can either let its content
+            scroll here, or fill the height itself and scroll internally (e.g. the Pipeline board). */}
+        <main className="min-h-0 flex-1 animate-fade-in overflow-y-auto p-4 lg:p-8">
           {/* Fill the available width (just the page padding) so collapsing the sidebar uses the
               freed space, instead of capping at a max width and leaving empty margins — matches iTrova. */}
-          <div className="w-full">
+          <div className="h-full w-full">
             <Outlet />
           </div>
         </main>
