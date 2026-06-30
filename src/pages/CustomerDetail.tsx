@@ -175,6 +175,7 @@ export default function CustomerDetail() {
         description="This permanently deletes the business and all its data — products, sales, invoices, staff and history. This can't be undone."
         confirmLabel="Delete business"
         variant="danger"
+        confirmPhrase={data.name}
         busy={deleting}
         onConfirm={confirmDelete}
       />
