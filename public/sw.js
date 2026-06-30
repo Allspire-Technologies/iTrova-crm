@@ -11,7 +11,15 @@ const CACHE = `adminos-${VERSION}`;
 const SHELL = ["/", "/index.html", "/manifest.webmanifest", "/icon.svg"];
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
+  // Cache shell entries independently (allSettled, not addAll) so a single transient failure on a
+  // non-critical asset (e.g. the icon) can't abort the whole install and leave the shell uncached
+  // — the cached shell is what lets navigations paint instantly on the next launch.
+  event.waitUntil(
+    caches
+      .open(CACHE)
+      .then((c) => Promise.allSettled(SHELL.map((u) => c.add(u))))
+      .then(() => self.skipWaiting()),
+  );
 });
 
 self.addEventListener("activate", (event) => {
@@ -27,15 +35,26 @@ self.addEventListener("fetch", (event) => {
   // Only handle our own origin, GET only. Everything else (Supabase, POST/PATCH) passes through.
   if (req.method !== "GET" || url.origin !== self.location.origin) return;
 
-  // Navigations: network-first, fall back to the cached shell when offline (SPA).
+  // Navigations: serve the cached app shell first so the PWA paints instantly on launch — even
+  // before the phone has connectivity at cold start. (Network-first here used to hang on a
+  // not-yet-ready / slow mobile connection, leaving a blank screen on open.) Freshness is handled
+  // out-of-band: every deploy stamps a new cache VERSION, and `activate` purges the old cache and
+  // precaches the current shell, so the cached "/index.html" always belongs to this deploy.
   if (req.mode === "navigate") {
     event.respondWith(
-      fetch(req)
-        .then((res) => {
-          caches.open(CACHE).then((c) => c.put("/index.html", res.clone()));
+      caches.open(CACHE).then(async (cache) => {
+        const cached = await cache.match("/index.html");
+        if (cached) return cached;
+        // First load of this version (shell not cached yet): go to the network, cache it, and
+        // fall back to whatever shell we have if the network is unavailable.
+        try {
+          const res = await fetch(req);
+          if (res && res.ok) cache.put("/index.html", res.clone());
           return res;
-        })
-        .catch(() => caches.match("/index.html").then((r) => r || caches.match("/"))),
+        } catch {
+          return (await cache.match("/index.html")) || cache.match("/");
+        }
+      }),
     );
     return;
   }
