@@ -1,7 +1,10 @@
 import { lazy, Suspense, useEffect, useState } from "react";
-import { useParams, Link } from "react-router-dom";
-import { ArrowLeft, Building2, Clock, Users } from "lucide-react";
+import { useParams, useNavigate, Link } from "react-router-dom";
+import { ArrowLeft, Building2, Clock, Trash2, Users } from "lucide-react";
+import { toast } from "sonner";
 import { PageHeader } from "@/components/PageHeader";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { deleteBusiness } from "@/lib/admin";
 import { EmptyState } from "@/components/states/EmptyState";
 import { LoadingState } from "@/components/states/LoadingState";
 import { ErrorState } from "@/components/states/ErrorState";
@@ -54,8 +57,13 @@ function SectionHeading({ children }: { children: React.ReactNode }) {
 
 export default function CustomerDetail() {
   const { id } = useParams();
-  const seesRevenue = roleSeesRevenue(useAuth().role); // subscription amount / revenue are admin-only (§3)
+  const navigate = useNavigate();
+  const role = useAuth().role;
+  const seesRevenue = roleSeesRevenue(role); // subscription amount / revenue are admin-only (§3)
+  const canDelete = role === "admin"; // deleting a business is Management/Admin-only
   const [data, setData] = useState<Detail | null | undefined>(undefined);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [health, setHealth] = useState<Health>(null);
   const [stage, setStage] = useState<CsPipeline | null>(null);
   const [scores, setScores] = useState<number[]>([]);
@@ -88,6 +96,19 @@ export default function CustomerDetail() {
       cancelled = true;
     };
   }, [id, reloadKey]);
+
+  async function confirmDelete() {
+    if (!id) return;
+    setDeleting(true);
+    try {
+      await deleteBusiness(id);
+      toast.success(`${data?.name ?? "Business"} deleted.`);
+      navigate("/customers", { replace: true });
+    } catch (e) {
+      toast.error((e as { message?: string })?.message ?? "Couldn't delete this business.");
+      setDeleting(false);
+    }
+  }
 
   const back = (
     <Button variant="outline" size="sm" asChild>
@@ -130,7 +151,32 @@ export default function CustomerDetail() {
       <PageHeader
         title={data.name}
         subtitle={`Joined ${formatDate(data.createdAt)} · ${data.team.length} ${data.team.length === 1 ? "member" : "members"}`}
-        action={back}
+        action={
+          <div className="flex flex-wrap items-center gap-2">
+            {back}
+            {canDelete && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                onClick={() => setConfirmingDelete(true)}
+              >
+                <Trash2 className="size-4" /> Delete business
+              </Button>
+            )}
+          </div>
+        }
+      />
+
+      <ConfirmDialog
+        open={confirmingDelete}
+        onOpenChange={(o) => { if (!o) setConfirmingDelete(false); }}
+        title={`Delete ${data.name}?`}
+        description="This permanently deletes the business and all its data — products, sales, invoices, staff and history. This can't be undone."
+        confirmLabel="Delete business"
+        variant="danger"
+        busy={deleting}
+        onConfirm={confirmDelete}
       />
 
       {/* Profile + Subscription */}

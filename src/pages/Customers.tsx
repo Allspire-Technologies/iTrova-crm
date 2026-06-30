@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowDown, ArrowUp, Building2, ChevronLeft, ChevronRight, Search, X } from "lucide-react";
+import { ArrowDown, ArrowUp, Building2, ChevronLeft, ChevronRight, Search, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { deleteBusiness } from "@/lib/admin";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/states/EmptyState";
 import { LoadingState } from "@/components/states/LoadingState";
@@ -13,6 +15,7 @@ import { SubscriptionBadge, PlanBadge } from "@/components/SubscriptionBadge";
 import { HealthBadge } from "@/components/HealthBadge";
 import {
   listCustomersPage,
+  type CustomerPageRow,
   type CustomersPage,
   type CustomersQuery,
   type CustomersSort,
@@ -112,11 +115,14 @@ export default function Customers() {
 
   const authRole = useAuth().role;
   const canAssign = authRole === "admin"; // assigning account managers is Management/Admin-only (§3)
+  const canDelete = authRole === "admin"; // deleting a business is Management/Admin-only
   const seesAll = roleSeesAll(authRole); // Support sees only assigned customers
   const [facets, setFacets] = useState<CustomersFacets | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkManager, setBulkManager] = useState("");
   const [assigning, setAssigning] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<CustomerPageRow | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   // Search box keeps its own (debounced) state so typing stays snappy.
   const [searchInput, setSearchInput] = useState(searchParams.get("q") ?? "");
@@ -203,6 +209,21 @@ export default function Customers() {
       toast.error((e as { message?: string })?.message ?? "Couldn't update assignments.");
     } finally {
       setAssigning(false);
+    }
+  }
+
+  async function confirmDelete() {
+    if (!pendingDelete) return;
+    setDeleting(true);
+    try {
+      await deleteBusiness(pendingDelete.businessId);
+      toast.success(`${pendingDelete.name} deleted.`);
+      setPendingDelete(null);
+      setReloadKey((k) => k + 1);
+    } catch (e) {
+      toast.error((e as { message?: string })?.message ?? "Couldn't delete this business.");
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -460,6 +481,7 @@ export default function Customers() {
                 <SortHead col="health" label="Score" align="right" />
                 <SortHead col="manager" label="Account manager" />
                 <TableHead>Status</TableHead>
+                {canDelete && <TableHead className="w-10 text-right">Delete</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -499,11 +521,24 @@ export default function Customers() {
                     {r.accountManagerName ?? "Unassigned"}
                   </TableCell>
                   <TableCell><HealthBadge band={r.healthBand} /></TableCell>
+                  {canDelete && (
+                    <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-8 text-muted-foreground hover:text-destructive"
+                        aria-label={`Delete ${r.name}`}
+                        onClick={() => setPendingDelete(r)}
+                      >
+                        <Trash2 className="size-4" />
+                      </Button>
+                    </TableCell>
+                  )}
                 </TableRow>
               ))}
               {rows.length === 0 && (
                 <TableRow className="hover:bg-transparent">
-                  <TableCell colSpan={14} className="py-12">
+                  <TableCell colSpan={canDelete ? 15 : 14} className="py-12">
                     <EmptyState
                       icon={Building2}
                       title="No businesses match"
@@ -545,8 +580,19 @@ export default function Customers() {
                         <div className="truncate font-medium text-brand-dark">{r.name}</div>
                         {r.ownerName && <div className="truncate text-xs text-muted-foreground">{r.ownerName}</div>}
                       </div>
-                      <div className="shrink-0">
+                      <div className="flex shrink-0 items-center gap-1">
                         <HealthBadge band={r.healthBand} score={r.healthScore} />
+                        {canDelete && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="size-8 text-muted-foreground hover:text-destructive"
+                            aria-label={`Delete ${r.name}`}
+                            onClick={(e) => { e.stopPropagation(); setPendingDelete(r); }}
+                          >
+                            <Trash2 className="size-4" />
+                          </Button>
+                        )}
                       </div>
                     </div>
                     <div className="mt-2 flex flex-wrap items-center gap-1.5">
@@ -601,6 +647,17 @@ export default function Customers() {
           </div>
         </div>
       </div>
+
+      <ConfirmDialog
+        open={!!pendingDelete}
+        onOpenChange={(o) => { if (!o) setPendingDelete(null); }}
+        title={pendingDelete ? `Delete ${pendingDelete.name}?` : "Delete business?"}
+        description="This permanently deletes the business and all its data — products, sales, invoices, staff and history. This can't be undone."
+        confirmLabel="Delete business"
+        variant="danger"
+        busy={deleting}
+        onConfirm={confirmDelete}
+      />
     </>
   );
 }
