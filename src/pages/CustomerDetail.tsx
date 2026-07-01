@@ -19,12 +19,13 @@ import { LazyInView } from "@/components/LazyInView";
 import { Sparkline } from "@/components/charts/Charts";
 import { UsageSection } from "@/components/customer/UsageSection";
 import { WorkflowSection } from "@/components/customer/WorkflowSection";
+import { ChangePlanPanel } from "@/components/customer/ChangePlanPanel";
 import { getCustomer, type CustomerDetail as Detail } from "@/lib/customers";
 import { getCurrentHealth, listHealthHistory } from "@/lib/health";
 import { pipeline } from "@/lib/cs";
 import type { CsPipeline, HealthBand, PipelineStage } from "@/lib/cs";
 import { useAuth } from "@/contexts/AuthContext";
-import { roleSeesRevenue } from "@/lib/roles";
+import { roleSeesRevenue, roleCanManagePlans } from "@/lib/roles";
 import { formatDate, formatMoney, formatRelative } from "@/lib/format";
 
 const CrmTabs = lazy(() => import("@/components/customer/CrmTabs"));
@@ -61,6 +62,7 @@ export default function CustomerDetail() {
   const role = useAuth().role;
   const seesRevenue = roleSeesRevenue(role); // subscription amount / revenue are admin-only (§3)
   const canDelete = role === "admin"; // deleting a business is Management/Admin-only
+  const canManagePlans = roleCanManagePlans(role); // dual-control plan change is Management/Admin-only
   const [data, setData] = useState<Detail | null | undefined>(undefined);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -229,6 +231,15 @@ export default function CustomerDetail() {
               <Field label="Started">{formatDate(sub?.startedAt)}</Field>
               <Field label="Currency">{data.currency}</Field>
             </dl>
+            {canManagePlans && (
+              <ChangePlanPanel
+                businessId={data.id}
+                currentTier={data.planKey}
+                currentCycle={sub?.cycle ?? null}
+                currency={data.currency}
+                onChanged={() => setReloadKey((k) => k + 1)}
+              />
+            )}
           </CardContent>
         </Card>
       </div>
