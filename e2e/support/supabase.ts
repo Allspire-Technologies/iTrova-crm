@@ -66,7 +66,7 @@ const AGG = {
   plan_key: "pro",
   subscription_status: "active",
   subscription_amount: 5000,
-  subscription_cycle: "month",
+  subscription_cycle: "monthly",
   subscription_started: CUSTOMER.created_at,
   renewal_date: null,
   joined_at: CUSTOMER.created_at,
@@ -258,6 +258,46 @@ export async function stubCustomers(page: Page) {
 }
 
 export { BIZ_ALERT, PROFILE_EXTRA };
+
+// Dual-control plan change (§ plan change). The signed-in admin is FAKE_USER; a second admin is
+// OTHER_ADMIN. `active` sets the row admin_get_plan_change returns (null = no in-flight request).
+export const OTHER_ADMIN = "22222222-2222-2222-2222-222222222222";
+// iTrova's plan_prices_view — one row per (plan_key × cycle) with the per-cycle price + discount.
+// The current business is on "pro" / monthly.
+export const PLAN_CATALOGUE = [
+  { plan_key: "free", plan_name: "Free", cycle: "monthly", price_amount: 0, discount_percent: 0 },
+  { plan_key: "pro", plan_name: "Pro", cycle: "monthly", price_amount: 10000, discount_percent: 0 },
+  { plan_key: "pro", plan_name: "Pro", cycle: "quarterly", price_amount: 30000, discount_percent: 25 },
+  { plan_key: "pro", plan_name: "Pro", cycle: "annual", price_amount: 120000, discount_percent: 25 },
+  { plan_key: "business", plan_name: "Business", cycle: "monthly", price_amount: 25000, discount_percent: 0 },
+  { plan_key: "business", plan_name: "Business", cycle: "quarterly", price_amount: 75000, discount_percent: 20 },
+];
+export function planChangeRow(over: Record<string, unknown> = {}) {
+  return {
+    id: "cccccccc-0000-0000-0000-0000000000c1",
+    business_id: CUSTOMER.id,
+    from_tier: "pro",
+    to_tier: "pro",
+    from_cycle: "monthly",
+    to_cycle: "annual",
+    status: "pending",
+    requested_by: FAKE_USER.id,
+    requested_by_name: "You",
+    approved_by: null,
+    approved_by_name: null,
+    code_expires_at: null,
+    created_at: CUSTOMER.created_at,
+    ...over,
+  };
+}
+export async function stubPlanChange(page: Page, opts: { active?: Record<string, unknown> | null } = {}) {
+  await page.route("**/rest/v1/rpc/admin_list_plans**", (r) => json(r, PLAN_CATALOGUE));
+  await page.route("**/rest/v1/rpc/admin_get_plan_change**", (r) => json(r, opts.active ? [opts.active] : []));
+  await page.route("**/rest/v1/rpc/admin_request_plan_change**", (r) => json(r, "cccccccc-0000-0000-0000-0000000000c1"));
+  await page.route("**/rest/v1/rpc/admin_approve_plan_change**", (r) => json(r, "123456"));
+  await page.route("**/rest/v1/rpc/admin_cancel_plan_change**", (r) => json(r, null));
+  await page.route("**/functions/v1/execute-plan-change**", (r) => json(r, { ok: true, to_tier: "business" }));
+}
 
 // Customer Success Pipeline board (§7.6) — two businesses in different stages.
 export const BOARD_OTHER = { id: "aaaaaaaa-0000-0000-0000-000000000099", name: "Bright Stores" };
