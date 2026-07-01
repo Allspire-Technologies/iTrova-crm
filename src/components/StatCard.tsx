@@ -18,9 +18,9 @@ export function StatCard({
   const card = (
     <Card className={to ? "h-full transition-colors hover:border-brand/40 hover:bg-secondary/30" : "h-full"}>
       <CardContent className="flex items-start justify-between gap-4 p-5">
-        <div>
+        <div className="min-w-0">
           <p className="text-xs uppercase tracking-wide text-muted-foreground">{label}</p>
-          <p className="mt-1 font-display text-2xl font-bold text-brand-dark">{value}</p>
+          <p className="mt-1 break-words font-display text-2xl font-bold text-brand-dark">{value}</p>
           {hint && <p className="mt-1 text-xs text-muted-foreground">{hint}</p>}
         </div>
         <div className="grid size-10 shrink-0 place-items-center rounded-lg bg-secondary text-brand">

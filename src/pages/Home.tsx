@@ -71,7 +71,7 @@ export default function Home() {
         <LoadingState label="Loading metrics…" />
       ) : (
         <div className="space-y-6">
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             <StatCard label="Total Businesses" value={String(data.kpis.totalBusinesses)} icon={Building2} to="/customers" />
             <StatCard label="Active Businesses" value={String(data.kpis.activeBusinesses)} hint="≥1 login in 30 days" icon={Activity} to="/customers?filter=active" />
             <StatCard label="Trial Businesses" value={String(data.kpis.trialBusinesses)} icon={FlaskConical} to="/customers?filter=trial" />
@@ -119,7 +119,7 @@ export default function Home() {
             </CardContent>
           </Card>
 
-          <div className="grid gap-6 lg:grid-cols-2">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             <Card>
               <CardHeader className="flex-row items-center justify-between space-y-0">
                 <CardTitle className="flex items-center gap-2">
