@@ -6,6 +6,7 @@ import {
   LayoutDashboard,
   Building2,
   Workflow,
+  Inbox,
   ListChecks,
   Settings,
   LogOut,
@@ -20,6 +21,7 @@ const nav = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard, end: true },
   { to: "/customers", label: "Customers", icon: Building2 },
   { to: "/pipeline", label: "Pipeline", icon: Workflow },
+  { to: "/worklist", label: "Worklist", icon: Inbox },
   { to: "/tasks", label: "Tasks", icon: ListChecks },
   { to: "/settings", label: "Settings", icon: Settings },
 ];
