@@ -301,7 +301,17 @@ export default function CustomerDetail() {
         <CardContent className="p-5">
           <LazyInView minHeight={240} placeholder={<LoadingState label="Loading CRM…" />}>
             <Suspense fallback={<LoadingState label="Loading CRM…" />}>
-              <CrmTabs businessId={data.id} />
+              <CrmTabs
+                businessId={data.id}
+                customer={{
+                  id: data.id,
+                  name: data.name,
+                  ownerName: owner?.name ?? null,
+                  ownerEmail: data.ownerEmail,
+                  planKey: data.planKey,
+                  renewalDate: sub?.currentPeriodEnd ?? null,
+                }}
+              />
             </Suspense>
           </LazyInView>
         </CardContent>

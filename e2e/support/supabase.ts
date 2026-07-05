@@ -259,6 +259,17 @@ export async function stubCustomers(page: Page) {
 
 export { BIZ_ALERT, PROFILE_EXTRA };
 
+// Direct customer email. `history` is what cs_customer_message returns (default none).
+export const EMAIL_TEMPLATES = [
+  { key: "welcome", name: "Welcome / onboarding", subject: "Welcome to iTrova, {{business_name}}", body: "<p>Hi {{owner_name}},</p><p>Welcome to {{plan}}.</p>" },
+  { key: "renewal_reminder", name: "Renewal reminder", subject: "Your iTrova plan renews on {{renewal_date}}", body: "<p>Hi {{owner_name}},</p><p>{{business_name}} renews soon.</p>" },
+];
+export async function stubMessaging(page: Page, opts: { history?: unknown[] } = {}) {
+  await page.route("**/rest/v1/cs_email_template**", (r) => json(r, EMAIL_TEMPLATES));
+  await page.route("**/rest/v1/cs_customer_message**", (r) => json(r, opts.history ?? []));
+  await page.route("**/functions/v1/send-customer-email**", (r) => json(r, { ok: true, id: "msg-1" }));
+}
+
 // Dual-control plan change (§ plan change). The signed-in admin is FAKE_USER; a second admin is
 // OTHER_ADMIN. `active` sets the row admin_get_plan_change returns (null = no in-flight request).
 export const OTHER_ADMIN = "22222222-2222-2222-2222-222222222222";
