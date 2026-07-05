@@ -38,12 +38,18 @@ test.describe("Customer messaging (§ email)", () => {
 
     await expect(page.getByLabel("Email subject")).toBeVisible();
     await page.getByLabel("Email subject").fill("Quick check-in");
-    await page.getByLabel("Email body").fill("Hello, just checking in.");
+    const body = page.getByLabel("Email body");
+    await body.fill("Hello, just checking in.");
+    // Bold it via the toolbar — the rich-text editor should emit real HTML, not plain text.
+    await body.selectText();
+    await page.getByRole("button", { name: "Bold" }).click();
+
     const send = page.waitForRequest(
       (r) => r.url().includes("/functions/v1/send-customer-email") && r.method() === "POST",
     );
     await page.getByRole("button", { name: "Send email" }).click();
-    await send;
+    const req = await send;
+    expect(req.postData() ?? "").toContain("<strong>Hello, just checking in.</strong>");
   });
 
   test("a CSO sees history but cannot compose", async ({ page }) => {

@@ -30,10 +30,13 @@ import {
   listCustomerMessages,
   sendCustomerEmail,
   renderTemplate,
+  richTextIsEmpty,
   type EmailTemplate,
   type CustomerMessage,
   type MergeVars,
 } from "@/lib/messaging";
+// Static import is fine: CrmTabs is itself a lazy chunk, so TipTap stays out of the main bundle.
+import RichTextEditor from "@/components/RichTextEditor";
 import { useAuth } from "@/contexts/AuthContext";
 import { roleCanWrite, roleCanMessageCustomers } from "@/lib/roles";
 
@@ -454,12 +457,6 @@ export type MessageCustomer = {
 
 const cap = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
 
-// Freeform text → minimal safe HTML (templates are already HTML and sent as-is).
-function freeformToHtml(text: string) {
-  const esc = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  return `<p>${esc.replace(/\n/g, "<br>")}</p>`;
-}
-
 function MessagesTab({ customer }: { customer: MessageCustomer }) {
   const canSend = roleCanMessageCustomers(useAuth().role);
   const [templates, setTemplates] = useState<EmailTemplate[]>([]);
@@ -491,15 +488,16 @@ function MessagesTab({ customer }: { customer: MessageCustomer }) {
   }
 
   async function send() {
-    if (!customer.ownerEmail || !subject.trim() || !body.trim()) return;
+    if (!customer.ownerEmail || !subject.trim() || richTextIsEmpty(body)) return;
     setSending(true);
     try {
       // The recipient is resolved server-side (always the owner's account email); ownerEmail here
-      // is only the UI preview/guard.
+      // is only the UI preview/guard. The rich-text editor emits HTML for both freeform and
+      // template bodies, so it's sent as-is.
       const sentTo = await sendCustomerEmail({
         businessId: customer.id,
         subject: subject.trim(),
-        html: templateKey ? body : freeformToHtml(body),
+        html: body,
         templateKey: templateKey || null,
       });
       toast.success(`Email sent to ${sentTo || customer.ownerEmail}.`);
@@ -528,10 +526,10 @@ function MessagesTab({ customer }: { customer: MessageCustomer }) {
             <span className="text-xs text-muted-foreground">To: {customer.ownerEmail ?? "— no owner email on file"}</span>
           </div>
           <Input value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Subject" aria-label="Email subject" />
-          <textarea className={textareaClass} value={body} onChange={(e) => setBody(e.target.value)} placeholder="Write your message…" aria-label="Email body" />
+          <RichTextEditor value={body} onChange={setBody} placeholder="Write your message…" ariaLabel="Email body" className="bg-background" />
           <div className="flex items-center justify-between gap-2">
             <span className="text-xs text-muted-foreground">One-way — replies aren’t monitored.</span>
-            <Button size="sm" onClick={send} disabled={sending || !customer.ownerEmail || !subject.trim() || !body.trim()}>
+            <Button size="sm" onClick={send} disabled={sending || !customer.ownerEmail || !subject.trim() || richTextIsEmpty(body)}>
               {sending ? "Sending…" : "Send email"}
             </Button>
           </div>

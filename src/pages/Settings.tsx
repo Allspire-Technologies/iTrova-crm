@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { SlidersHorizontal, Users, ShieldCheck, Lock, UserPlus, Copy, Trash2, Mail, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/PageHeader";
@@ -15,7 +15,10 @@ import { getHealthSettings, updateHealthSettings, type HealthSettings, type Heal
 import { listCustomersPage, type CustomerPageRow } from "@/lib/customers";
 import { getCustomersFacets, type CustomersFacets } from "@/lib/admin";
 import { accountAssignment } from "@/lib/cs";
-import { listTemplates, saveTemplate, deleteTemplate, type EmailTemplate } from "@/lib/messaging";
+import { listTemplates, saveTemplate, deleteTemplate, richTextIsEmpty, type EmailTemplate } from "@/lib/messaging";
+
+// Lazy: keeps TipTap out of the main bundle — it loads only when the template editor opens.
+const RichTextEditor = lazy(() => import("@/components/RichTextEditor"));
 import { listStaffRoles, setStaffRole, inviteStaff, removeStaff, STAFF_ROLE_LABELS, STAFF_ROLES, type StaffRole, type StaffWithRole } from "@/lib/roles";
 
 const selectClass =
@@ -487,8 +490,6 @@ function RolesCard({ isAdmin }: { isAdmin: boolean }) {
   );
 }
 
-const textareaClass =
-  "min-h-[96px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 const EMPTY_TEMPLATE: EmailTemplate = { key: "", name: "", subject: "", body: "" };
 const slug = (s: string) => s.toLowerCase().trim().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
 
@@ -595,13 +596,21 @@ function EmailTemplatesCard({ canEdit }: { canEdit: boolean }) {
               <span className="text-xs text-muted-foreground">Subject</span>
               <Input value={form.subject} onChange={(e) => setForm({ ...form, subject: e.target.value })} placeholder="Subject with {{merge}} fields…" aria-label="Template subject" className="mt-1" />
             </label>
-            <label className="block">
-              <span className="text-xs text-muted-foreground">Body (HTML)</span>
-              <textarea className={`${textareaClass} mt-1 font-mono text-xs`} value={form.body} onChange={(e) => setForm({ ...form, body: e.target.value })} placeholder="<p>Hi {{owner_name}}, …</p>" aria-label="Template body" />
-            </label>
+            <div className="block">
+              <span className="text-xs text-muted-foreground">Body</span>
+              <Suspense fallback={<div className="mt-1 min-h-[132px] rounded-md border border-input bg-background" />}>
+                <RichTextEditor
+                  value={form.body}
+                  onChange={(html) => setForm((f) => ({ ...f, body: html }))}
+                  placeholder="Hi {{owner_name}}, …"
+                  ariaLabel="Template body"
+                  className="mt-1 bg-background"
+                />
+              </Suspense>
+            </div>
             <div className="flex justify-end gap-2">
               <Button size="sm" variant="ghost" onClick={() => setEditing(null)}>Cancel</Button>
-              <Button size="sm" onClick={save} disabled={saving || !form.name.trim() || !form.subject.trim() || !form.body.trim()}>
+              <Button size="sm" onClick={save} disabled={saving || !form.name.trim() || !form.subject.trim() || richTextIsEmpty(form.body)}>
                 {saving ? "Saving…" : "Save template"}
               </Button>
             </div>

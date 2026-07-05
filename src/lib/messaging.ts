@@ -26,6 +26,11 @@ export type MergeVars = {
   renewal_date: string;
 };
 
+/** True when a rich-text HTML value has no visible content (e.g. "<p></p>"). */
+export function richTextIsEmpty(html: string): boolean {
+  return html.replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").trim().length === 0;
+}
+
 /** Replace {{token}} occurrences with the matching merge var (unknown tokens are left as-is). */
 export function renderTemplate(text: string, vars: MergeVars): string {
   return text.replace(/\{\{\s*(\w+)\s*\}\}/g, (m, key: string) => (key in vars ? (vars as Record<string, string>)[key] : m));
