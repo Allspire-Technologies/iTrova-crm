@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { SlidersHorizontal, Users, ShieldCheck, Lock, UserPlus, Copy, Trash2 } from "lucide-react";
+import { SlidersHorizontal, Users, ShieldCheck, Lock, UserPlus, Copy, Trash2, Mail, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/PageHeader";
 import { LoadingState } from "@/components/states/LoadingState";
 import { ErrorState } from "@/components/states/ErrorState";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -14,6 +15,7 @@ import { getHealthSettings, updateHealthSettings, type HealthSettings, type Heal
 import { listCustomersPage, type CustomerPageRow } from "@/lib/customers";
 import { getCustomersFacets, type CustomersFacets } from "@/lib/admin";
 import { accountAssignment } from "@/lib/cs";
+import { listTemplates, saveTemplate, deleteTemplate, type EmailTemplate } from "@/lib/messaging";
 import { listStaffRoles, setStaffRole, inviteStaff, removeStaff, STAFF_ROLE_LABELS, STAFF_ROLES, type StaffRole, type StaffWithRole } from "@/lib/roles";
 
 const selectClass =
@@ -485,6 +487,173 @@ function RolesCard({ isAdmin }: { isAdmin: boolean }) {
   );
 }
 
+const textareaClass =
+  "min-h-[96px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+const EMPTY_TEMPLATE: EmailTemplate = { key: "", name: "", subject: "", body: "" };
+const slug = (s: string) => s.toLowerCase().trim().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+
+function EmailTemplatesCard({ canEdit }: { canEdit: boolean }) {
+  const [templates, setTemplates] = useState<EmailTemplate[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+  // Editing state: existing key, or "" for a brand-new template; null = nothing open.
+  const [editing, setEditing] = useState<string | null>(null);
+  const [form, setForm] = useState<EmailTemplate>(EMPTY_TEMPLATE);
+  const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState<EmailTemplate | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setTemplates(null);
+    setError(null);
+    listTemplates()
+      .then((t) => !cancelled && setTemplates(t))
+      .catch((e) => !cancelled && setError(e?.message ?? "Failed to load templates."));
+    return () => {
+      cancelled = true;
+    };
+  }, [reloadKey]);
+
+  function open(t: EmailTemplate | null) {
+    setEditing(t ? t.key : "");
+    setForm(t ?? EMPTY_TEMPLATE);
+  }
+
+  async function save() {
+    const key = editing || slug(form.name);
+    if (!key || !form.name.trim() || !form.subject.trim() || !form.body.trim()) return;
+    setSaving(true);
+    try {
+      const saved = await saveTemplate({ ...form, key, name: form.name.trim() });
+      setTemplates((l) => {
+        const list = l ?? [];
+        return list.some((x) => x.key === key) ? list.map((x) => (x.key === key ? saved : x)) : [...list, saved];
+      });
+      setEditing(null);
+      toast.success(`Template “${saved.name}” saved.`);
+    } catch (e) {
+      toast.error((e as { message?: string })?.message ?? "Couldn't save the template.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function confirmDelete() {
+    if (!deleting) return;
+    setDeleteBusy(true);
+    try {
+      await deleteTemplate(deleting.key);
+      setTemplates((l) => (l ?? []).filter((x) => x.key !== deleting.key));
+      toast.success(`Template “${deleting.name}” deleted.`);
+    } catch (e) {
+      toast.error((e as { message?: string })?.message ?? "Couldn't delete the template.");
+    } finally {
+      setDeleteBusy(false);
+      setDeleting(null);
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader className="flex-row flex-wrap items-center justify-between gap-2 space-y-0">
+        <CardTitle className="flex items-center gap-2"><Mail className="size-4" /> Email templates</CardTitle>
+        {canEdit && (
+          <Button size="sm" variant="outline" onClick={() => open(null)}><Plus className="size-4" /> New template</Button>
+        )}
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <p className="text-sm text-muted-foreground">
+          Used by the Messages tab on Customer Detail. Merge fields: {"{{business_name}} {{owner_name}} {{plan}} {{renewal_date}}"}.
+        </p>
+
+        <ConfirmDialog
+          open={deleting !== null}
+          onOpenChange={(o) => { if (!o && !deleteBusy) setDeleting(null); }}
+          title={`Delete the “${deleting?.name}” template?`}
+          description="Staff will no longer be able to pick it in the composer. Past messages are unaffected."
+          confirmLabel="Delete template"
+          variant="danger"
+          busy={deleteBusy}
+          onConfirm={confirmDelete}
+        />
+
+        {/* Editor (new or existing) */}
+        {canEdit && editing !== null && (
+          <div className="space-y-2 rounded-lg border border-border/60 bg-secondary/30 p-3">
+            <div className="grid gap-2 sm:grid-cols-2">
+              <label className="block">
+                <span className="text-xs text-muted-foreground">Name</span>
+                <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Win-back offer" aria-label="Template name" className="mt-1" />
+              </label>
+              <label className="block">
+                <span className="text-xs text-muted-foreground">Key {editing === "" ? "(auto from name)" : "(fixed)"}</span>
+                <Input value={editing || slug(form.name)} readOnly disabled aria-label="Template key" className="mt-1 font-mono text-xs" />
+              </label>
+            </div>
+            <label className="block">
+              <span className="text-xs text-muted-foreground">Subject</span>
+              <Input value={form.subject} onChange={(e) => setForm({ ...form, subject: e.target.value })} placeholder="Subject with {{merge}} fields…" aria-label="Template subject" className="mt-1" />
+            </label>
+            <label className="block">
+              <span className="text-xs text-muted-foreground">Body (HTML)</span>
+              <textarea className={`${textareaClass} mt-1 font-mono text-xs`} value={form.body} onChange={(e) => setForm({ ...form, body: e.target.value })} placeholder="<p>Hi {{owner_name}}, …</p>" aria-label="Template body" />
+            </label>
+            <div className="flex justify-end gap-2">
+              <Button size="sm" variant="ghost" onClick={() => setEditing(null)}>Cancel</Button>
+              <Button size="sm" onClick={save} disabled={saving || !form.name.trim() || !form.subject.trim() || !form.body.trim()}>
+                {saving ? "Saving…" : "Save template"}
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {error ? (
+          <ErrorState message={error} onRetry={() => setReloadKey((k) => k + 1)} />
+        ) : templates === null ? (
+          <LoadingState label="Loading templates…" />
+        ) : templates.length === 0 ? (
+          <p className="py-6 text-center text-sm text-muted-foreground">No templates yet.</p>
+        ) : (
+          <div className="rounded-lg border border-border/60">
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead>Template</TableHead>
+                  <TableHead>Subject</TableHead>
+                  {canEdit && <TableHead className="text-right">Actions</TableHead>}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {templates.map((t) => (
+                  <TableRow key={t.key} className="hover:bg-transparent">
+                    <TableCell className="font-medium text-brand-dark">
+                      {t.name}
+                      <span className="ml-2 font-mono text-xs text-muted-foreground">{t.key}</span>
+                    </TableCell>
+                    <TableCell className="max-w-[320px] truncate text-muted-foreground">{t.subject}</TableCell>
+                    {canEdit && (
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-2">
+                          <Button size="sm" variant="outline" onClick={() => open(t)} aria-label={`Edit template ${t.name}`}>Edit</Button>
+                          <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => setDeleting(t)} aria-label={`Delete template ${t.name}`}>
+                            <Trash2 className="size-3.5" /> Delete
+                          </Button>
+                        </div>
+                      </TableCell>
+                    )}
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+        {!canEdit && <AdminNote>Only Management/Admin can edit templates.</AdminNote>}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function Settings() {
   const { role } = useAuth();
   const isAdmin = role === "admin";
@@ -495,6 +664,7 @@ export default function Settings() {
       <div className="space-y-6">
         <ThresholdsCard canEdit={isAdmin} />
         <AssignmentCard canEdit={isAdmin} />
+        <EmailTemplatesCard canEdit={isAdmin} />
         <RolesCard isAdmin={isAdmin} />
       </div>
     </>

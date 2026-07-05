@@ -223,6 +223,15 @@ export async function stubSettings(page: Page) {
   await page.route("**/rest/v1/cs_account_assignment**", (r) =>
     json(r, { business_id: CUSTOMER.id, account_manager_id: MANAGER.id, assigned_at: CUSTOMER.created_at, created_at: CUSTOMER.created_at, updated_at: CUSTOMER.created_at }),
   );
+  // Email templates card: list for GET; upsert (POST) echoes the sent row (.single()).
+  await page.route("**/rest/v1/cs_email_template**", (r) => {
+    const method = r.request().method();
+    if (method === "GET") return json(r, EMAIL_TEMPLATES);
+    if (method === "DELETE") return json(r, []);
+    let sent: Record<string, unknown> = {};
+    try { sent = JSON.parse(r.request().postData() || "{}"); } catch { /* keep {} */ }
+    return json(r, { ...EMAIL_TEMPLATES[0], ...sent });
+  });
 }
 
 export async function stubCustomers(page: Page) {
