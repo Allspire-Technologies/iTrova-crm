@@ -44,6 +44,16 @@ export type HomeData = { kpis: HomeKpis; atRisk: AtRiskItem[]; renewals: Renewal
 const daysUntil = (iso: string | null, now: number) => (iso ? Math.ceil((new Date(iso).getTime() - now) / DAY) : null);
 const daysSince = (iso: string | null, now: number) => (iso ? (now - new Date(iso).getTime()) / DAY : null);
 
+// Months per billing cycle — mirrors public.cs_cycle_months. iTrova bills monthly / quarterly /
+// biannual / annual (legacy 'month'/'year' accepted); unknown → 1 so we never inflate MRR.
+const CYCLE_MONTHS: Record<string, number> = {
+  monthly: 1, month: 1,
+  quarterly: 3, quarter: 3,
+  biannual: 6, semiannual: 6,
+  annual: 12, annually: 12, yearly: 12, year: 12,
+};
+const cycleMonths = (cycle: string | null) => CYCLE_MONTHS[(cycle ?? "monthly").toLowerCase()] ?? 1;
+
 export async function getHomeData(): Promise<HomeData> {
   const [aggs, health, alerts] = await Promise.all([
     listBusinessAggregates(),
@@ -73,7 +83,7 @@ export async function getHomeData(): Promise<HomeData> {
 
     if (new Date(a.joinedAt).getTime() >= monthStart) newThisMonth++;
     if (a.subscriptionStatus === "active" && a.subscriptionAmount) {
-      mrr += a.subscriptionCycle === "year" ? a.subscriptionAmount / 12 : a.subscriptionAmount;
+      mrr += a.subscriptionAmount / cycleMonths(a.subscriptionCycle);
     }
   }
   mrr = Math.round(mrr);
