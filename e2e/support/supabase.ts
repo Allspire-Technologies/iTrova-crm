@@ -267,7 +267,8 @@ export const EMAIL_TEMPLATES = [
 export async function stubMessaging(page: Page, opts: { history?: unknown[] } = {}) {
   await page.route("**/rest/v1/cs_email_template**", (r) => json(r, EMAIL_TEMPLATES));
   await page.route("**/rest/v1/cs_customer_message**", (r) => json(r, opts.history ?? []));
-  await page.route("**/functions/v1/send-customer-email**", (r) => json(r, { ok: true, id: "msg-1" }));
+  // The function resolves the recipient server-side and echoes it back.
+  await page.route("**/functions/v1/send-customer-email**", (r) => json(r, { ok: true, id: "msg-1", to_email: "ada@mamaput.example" }));
 }
 
 // Dual-control plan change (§ plan change). The signed-in admin is FAKE_USER; a second admin is

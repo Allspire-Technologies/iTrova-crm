@@ -63,22 +63,20 @@ export async function listCustomerMessages(businessId: string): Promise<Customer
 
 export type SendEmailInput = {
   businessId: string;
-  toEmail: string;
-  toName?: string | null;
   subject: string;
   html: string;
   templateKey?: string | null;
 };
 
-/** Send a customer email via the Edge Function (verifies role + assignment, sends, logs). */
-export async function sendCustomerEmail(input: SendEmailInput): Promise<void> {
-  const { data, error } = await supabase.functions.invoke<{ ok?: boolean; id?: string | null; error?: string }>(
+/** Send a customer email via the Edge Function. The recipient is resolved SERVER-SIDE (always the
+ *  business owner's account email) — the browser never chooses the address. Returns the resolved
+ *  recipient for confirmation. */
+export async function sendCustomerEmail(input: SendEmailInput): Promise<string> {
+  const { data, error } = await supabase.functions.invoke<{ ok?: boolean; id?: string | null; to_email?: string; error?: string }>(
     "send-customer-email",
     {
       body: {
         business_id: input.businessId,
-        to_email: input.toEmail,
-        to_name: input.toName ?? null,
         subject: input.subject,
         html: input.html,
         template_key: input.templateKey ?? null,
@@ -100,4 +98,5 @@ export async function sendCustomerEmail(input: SendEmailInput): Promise<void> {
   }
   if (data?.error) throw new Error(data.error);
   if (!data?.ok) throw new Error("The email did not send.");
+  return data.to_email ?? "";
 }

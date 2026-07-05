@@ -494,15 +494,15 @@ function MessagesTab({ customer }: { customer: MessageCustomer }) {
     if (!customer.ownerEmail || !subject.trim() || !body.trim()) return;
     setSending(true);
     try {
-      await sendCustomerEmail({
+      // The recipient is resolved server-side (always the owner's account email); ownerEmail here
+      // is only the UI preview/guard.
+      const sentTo = await sendCustomerEmail({
         businessId: customer.id,
-        toEmail: customer.ownerEmail,
-        toName: customer.ownerName,
         subject: subject.trim(),
         html: templateKey ? body : freeformToHtml(body),
         templateKey: templateKey || null,
       });
-      toast.success(`Email sent to ${customer.ownerEmail}.`);
+      toast.success(`Email sent to ${sentTo || customer.ownerEmail}.`);
       setSubject("");
       setBody("");
       setTemplateKey("");
