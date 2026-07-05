@@ -82,14 +82,23 @@ supabase db push
 | 22 | `..627160000_cs_leads` | `cs_lead` — standalone prospects for the pipeline's Lead column (decoupled from businesses); frees any business pinned to `lead` |
 | 23 | `..630120000_admin_delete_business` | `admin_delete_business()` — admin-only cascade delete of a business |
 | 24 | `..701120000_plan_change_requests` | `cs_plan_change_request` + dual-control plan-change/renewal RPCs (`admin_list_plans`, `admin_request_plan_change`, `admin_approve_plan_change`, `admin_apply_plan_change`); pairs with the `execute-plan-change` Edge Function |
+| 25 | `..703140000_cs_worklist_admin` | `admin_worklist()` — cross-customer view of all Notes & CRM items |
+| 26 | `..705120000_customer_messaging` | `cs_customer_message` (send log) + `cs_email_template` (seeded); pairs with the `send-customer-email` Edge Function |
 
 ### Edge Functions
 
 Deployed to the shared iTrova project (service-role key stays server-side):
 
 ```bash
-supabase functions deploy invite-staff        # staff invite links (§3)
+supabase functions deploy invite-staff         # staff invite links (§3)
 supabase functions deploy execute-plan-change  # applies a dual-control plan change (password + code)
+supabase functions deploy send-customer-email  # emails a customer via Sender.net (Admin/Support)
+```
+
+`send-customer-email` needs the Sender.net credentials as function secrets:
+
+```bash
+supabase secrets set SENDER_API_KEY=... SENDER_FROM_EMAIL=... SENDER_FROM_NAME="iTrova"
 ```
 
 ### Seed the first internal admin

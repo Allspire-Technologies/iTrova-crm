@@ -34,6 +34,8 @@ export const roleSeesRevenue = (role: StaffRole | null) => role === "admin";
 export const roleSeesAll = (role: StaffRole | null) => role === "admin" || role === "cso" || role === "pm";
 // Changing a business's plan (dual-control) is Management/Admin-only (§3). DB is the real gate.
 export const roleCanManagePlans = (role: StaffRole | null) => role === "admin";
+// Emailing a customer directly is Management/Admin + Customer Support (§3). DB is the real gate.
+export const roleCanMessageCustomers = (role: StaffRole | null) => role === "admin" || role === "support";
 
 export async function getMyRole(): Promise<StaffRole | null> {
   const { data, error } = await supabase.rpc("cs_my_role");

@@ -25,8 +25,17 @@ import {
   type TaskRole,
 } from "@/lib/cs";
 import { ROLE_LABELS } from "@/lib/tasks";
+import {
+  listTemplates,
+  listCustomerMessages,
+  sendCustomerEmail,
+  renderTemplate,
+  type EmailTemplate,
+  type CustomerMessage,
+  type MergeVars,
+} from "@/lib/messaging";
 import { useAuth } from "@/contexts/AuthContext";
-import { roleCanWrite } from "@/lib/roles";
+import { roleCanWrite, roleCanMessageCustomers } from "@/lib/roles";
 
 const selectClass =
   "h-9 rounded-md border border-input bg-background px-2 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring";
@@ -433,6 +442,125 @@ function TasksTab({ businessId }: { businessId: string }) {
   );
 }
 
+// --------------------------------------------------------------------------- Messages (email)
+export type MessageCustomer = {
+  id: string;
+  name: string;
+  ownerName: string | null;
+  ownerEmail: string | null;
+  planKey: string | null;
+  renewalDate: string | null;
+};
+
+const cap = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
+
+// Freeform text → minimal safe HTML (templates are already HTML and sent as-is).
+function freeformToHtml(text: string) {
+  const esc = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return `<p>${esc.replace(/\n/g, "<br>")}</p>`;
+}
+
+function MessagesTab({ customer }: { customer: MessageCustomer }) {
+  const canSend = roleCanMessageCustomers(useAuth().role);
+  const [templates, setTemplates] = useState<EmailTemplate[]>([]);
+  const [history, setHistory] = useState<CustomerMessage[] | null>(null);
+  const [templateKey, setTemplateKey] = useState(""); // "" = freeform
+  const [subject, setSubject] = useState("");
+  const [body, setBody] = useState("");
+  const [sending, setSending] = useState(false);
+
+  const vars: MergeVars = {
+    business_name: customer.name,
+    owner_name: customer.ownerName ?? "there",
+    plan: cap(customer.planKey ?? "—"),
+    renewal_date: customer.renewalDate ? formatDate(customer.renewalDate) : "—",
+  };
+
+  useEffect(() => {
+    if (canSend) listTemplates().then(setTemplates).catch((e) => toast.error(msg(e)));
+  }, [canSend]);
+  useEffect(() => {
+    listCustomerMessages(customer.id).then(setHistory).catch((e) => toast.error(msg(e)));
+  }, [customer.id]);
+
+  function pickTemplate(key: string) {
+    setTemplateKey(key);
+    const t = templates.find((x) => x.key === key);
+    setSubject(t ? renderTemplate(t.subject, vars) : "");
+    setBody(t ? renderTemplate(t.body, vars) : "");
+  }
+
+  async function send() {
+    if (!customer.ownerEmail || !subject.trim() || !body.trim()) return;
+    setSending(true);
+    try {
+      await sendCustomerEmail({
+        businessId: customer.id,
+        toEmail: customer.ownerEmail,
+        toName: customer.ownerName,
+        subject: subject.trim(),
+        html: templateKey ? body : freeformToHtml(body),
+        templateKey: templateKey || null,
+      });
+      toast.success(`Email sent to ${customer.ownerEmail}.`);
+      setSubject("");
+      setBody("");
+      setTemplateKey("");
+      listCustomerMessages(customer.id).then(setHistory).catch(() => {});
+    } catch (e) {
+      toast.error(msg(e));
+    } finally {
+      setSending(false);
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      {canSend ? (
+        <div className="space-y-2 rounded-lg border border-border/60 bg-secondary/30 p-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <select className={selectClass} value={templateKey} onChange={(e) => pickTemplate(e.target.value)} aria-label="Email template">
+              <option value="">Freeform</option>
+              {templates.map((t) => (
+                <option key={t.key} value={t.key}>{t.name}</option>
+              ))}
+            </select>
+            <span className="text-xs text-muted-foreground">To: {customer.ownerEmail ?? "— no owner email on file"}</span>
+          </div>
+          <Input value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Subject" aria-label="Email subject" />
+          <textarea className={textareaClass} value={body} onChange={(e) => setBody(e.target.value)} placeholder="Write your message…" aria-label="Email body" />
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs text-muted-foreground">One-way — replies aren’t monitored.</span>
+            <Button size="sm" onClick={send} disabled={sending || !customer.ownerEmail || !subject.trim() || !body.trim()}>
+              {sending ? "Sending…" : "Send email"}
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <Empty label="Only Management/Admin and Support can email customers." />
+      )}
+
+      <ul className="space-y-2">
+        {history == null && <Empty label="Loading…" />}
+        {history?.length === 0 && <Empty label="No emails sent yet." />}
+        {history?.map((m) => (
+          <Row key={m.id}>
+            <div className="flex items-center justify-between gap-2">
+              <span className="min-w-0 flex-1 truncate font-medium text-brand-dark">{m.subject}</span>
+              <Badge variant={m.status === "failed" ? "destructive" : "secondary"}>{m.status}</Badge>
+              <span className="shrink-0 text-xs text-muted-foreground">{formatRelative(m.createdAt)}</span>
+            </div>
+            <div className="mt-1 truncate text-xs text-muted-foreground">
+              To {m.toEmail}{m.templateKey ? ` · ${m.templateKey}` : ""}
+            </div>
+            {m.error && <div className="mt-1 text-xs text-destructive">{m.error}</div>}
+          </Row>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 // --------------------------------------------------------------------------- Tabs shell
 const TABS = [
   { key: "notes", label: "Meeting Notes" },
@@ -440,11 +568,12 @@ const TABS = [
   { key: "features", label: "Feature Requests" },
   { key: "feedback", label: "Customer Feedback" },
   { key: "tasks", label: "Tasks" },
+  { key: "messages", label: "Messages" },
 ] as const;
 
 type TabKey = (typeof TABS)[number]["key"];
 
-export default function CrmTabs({ businessId }: { businessId: string }) {
+export default function CrmTabs({ businessId, customer }: { businessId: string; customer: MessageCustomer }) {
   const [tab, setTab] = useState<TabKey>("notes");
   return (
     <div className="space-y-4">
@@ -472,6 +601,7 @@ export default function CrmTabs({ businessId }: { businessId: string }) {
       {tab === "features" && <FeaturesTab businessId={businessId} />}
       {tab === "feedback" && <FeedbackTab businessId={businessId} />}
       {tab === "tasks" && <TasksTab businessId={businessId} />}
+      {tab === "messages" && <MessagesTab customer={customer} />}
     </div>
   );
 }
