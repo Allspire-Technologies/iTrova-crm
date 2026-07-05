@@ -41,6 +41,23 @@ export async function listTemplates(): Promise<EmailTemplate[]> {
   return (data ?? []) as EmailTemplate[];
 }
 
+/** Create or update a template (admin-only via RLS). */
+export async function saveTemplate(t: EmailTemplate): Promise<EmailTemplate> {
+  const { data, error } = await supabase
+    .from("cs_email_template")
+    .upsert({ key: t.key, name: t.name, subject: t.subject, body: t.body }, { onConflict: "key" })
+    .select("key, name, subject, body")
+    .single();
+  if (error) throw error;
+  return data as EmailTemplate;
+}
+
+/** Delete a template (admin-only via RLS). */
+export async function deleteTemplate(key: string): Promise<void> {
+  const { error } = await supabase.from("cs_email_template").delete().eq("key", key);
+  if (error) throw error;
+}
+
 /** Past messages sent to a business (visibility-scoped by RLS), newest first. */
 export async function listCustomerMessages(businessId: string): Promise<CustomerMessage[]> {
   const { data, error } = await supabase

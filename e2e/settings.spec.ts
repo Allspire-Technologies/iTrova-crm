@@ -96,4 +96,66 @@ test.describe("Settings (§3/§8)", () => {
     await expect(page.getByLabel(`Role for ${MANAGER.name}`)).toHaveCount(0); // read-only, no select
     await expect(page.getByLabel("New staff email")).toHaveCount(0); // no invite form for non-admin
   });
+
+  test("admin can create an email template (upserts cs_email_template)", async ({ page }) => {
+    await signIn(page, { staff: true });
+    await stubSettings(page);
+    await page.goto("/settings");
+
+    await expect(page.getByText("Email templates")).toBeVisible();
+    await page.getByRole("button", { name: "New template" }).click();
+    await page.getByLabel("Template name").fill("Win-back offer");
+    await expect(page.getByLabel("Template key")).toHaveValue("win_back_offer"); // auto-slug
+    await page.getByLabel("Template subject").fill("We miss you, {{business_name}}");
+    await page.getByLabel("Template body").fill("<p>Hi {{owner_name}}, come back!</p>");
+
+    const post = page.waitForRequest((r) => r.url().includes("/rest/v1/cs_email_template") && r.method() === "POST");
+    await page.getByRole("button", { name: "Save template" }).click();
+    await post;
+  });
+
+  test("admin can edit an existing template (prefilled form)", async ({ page }) => {
+    await signIn(page, { staff: true });
+    await stubSettings(page);
+    await page.goto("/settings");
+
+    await page.getByRole("button", { name: "Edit template Welcome / onboarding" }).click();
+    const subject = page.getByLabel("Template subject");
+    await expect(subject).toHaveValue(/Welcome to iTrova/);
+    await subject.fill("Welcome aboard, {{business_name}}!");
+
+    const post = page.waitForRequest((r) => r.url().includes("/rest/v1/cs_email_template") && r.method() === "POST");
+    await page.getByRole("button", { name: "Save template" }).click();
+    await post;
+  });
+
+  test("deleting a template asks for confirmation first", async ({ page }) => {
+    await signIn(page, { staff: true });
+    await stubSettings(page);
+    await page.goto("/settings");
+
+    let deleted = false;
+    page.on("request", (r) => {
+      if (r.url().includes("/rest/v1/cs_email_template") && r.method() === "DELETE") deleted = true;
+    });
+    await page.getByRole("button", { name: "Delete template Welcome / onboarding" }).click();
+    await expect(page.getByRole("alertdialog")).toBeVisible();
+    expect(deleted).toBe(false);
+
+    const del = page.waitForRequest((r) => r.url().includes("/rest/v1/cs_email_template") && r.method() === "DELETE");
+    await page.getByRole("button", { name: "Delete template", exact: true }).click();
+    await del;
+  });
+
+  test("a non-admin (CSO) sees templates read-only", async ({ page }) => {
+    await signIn(page, { staff: true, role: "cso" });
+    await stubSettings(page);
+    await page.goto("/settings");
+
+    await expect(page.getByText("Email templates")).toBeVisible();
+    await expect(page.getByText("Welcome / onboarding")).toBeVisible(); // list still readable
+    await expect(page.getByRole("button", { name: "New template" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /Edit template/ })).toHaveCount(0);
+    await expect(page.getByText("Only Management/Admin can edit templates.")).toBeVisible();
+  });
 });
