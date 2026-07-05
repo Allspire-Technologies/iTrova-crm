@@ -7,6 +7,7 @@ import {
   Building2,
   Workflow,
   Inbox,
+  CalendarClock,
   ListChecks,
   Settings,
   LogOut,
@@ -22,6 +23,7 @@ const nav = [
   { to: "/customers", label: "Customers", icon: Building2 },
   { to: "/pipeline", label: "Pipeline", icon: Workflow },
   { to: "/worklist", label: "Worklist", icon: Inbox },
+  { to: "/renewals", label: "Renewals", icon: CalendarClock },
   { to: "/tasks", label: "Tasks", icon: ListChecks },
   { to: "/settings", label: "Settings", icon: Settings },
 ];

@@ -10,6 +10,8 @@ import Customers from "@/pages/Customers";
 import CustomerDetail from "@/pages/CustomerDetail";
 import Pipeline from "@/pages/Pipeline";
 import Worklist from "@/pages/Worklist";
+import Renewals from "@/pages/Renewals";
+import RenewalDetail from "@/pages/RenewalDetail";
 import Tasks from "@/pages/Tasks";
 import Settings from "@/pages/Settings";
 import NotFound from "@/pages/NotFound";
@@ -37,6 +39,8 @@ export default function App() {
             <Route path="/customers/:id" element={<CustomerDetail />} />
             <Route path="/pipeline" element={<Pipeline />} />
             <Route path="/worklist" element={<Worklist />} />
+            <Route path="/renewals" element={<Renewals />} />
+            <Route path="/renewals/:id" element={<RenewalDetail />} />
             <Route path="/tasks" element={<Tasks />} />
             <Route path="/settings" element={<Settings />} />
           </Route>

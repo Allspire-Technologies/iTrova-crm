@@ -268,6 +268,32 @@ export async function stubCustomers(page: Page) {
 
 export { BIZ_ALERT, PROFILE_EXTRA };
 
+// Renewal payment records (Renewals module). GET → fixture; POST/PATCH echo sent fields (.single()).
+export const RENEWAL_PAYMENT = {
+  id: "abababab-0000-0000-0000-0000000000r1",
+  business_id: CUSTOMER.id,
+  paid_at: "2026-06-15",
+  amount: 10000,
+  currency: "NGN",
+  ref_no: "TRF/2026/00123",
+  notes: "Bank transfer confirmed by finance.",
+  plan_key: "pro",
+  cycle: "monthly",
+  created_by: null,
+  created_at: CUSTOMER.created_at,
+  updated_at: CUSTOMER.created_at,
+};
+export async function stubRenewals(page: Page, opts: { records?: unknown[] } = {}) {
+  await page.route("**/rest/v1/cs_renewal_payment**", (r) => {
+    const method = r.request().method();
+    if (method === "GET") return json(r, opts.records ?? [RENEWAL_PAYMENT]);
+    if (method === "DELETE") return json(r, []);
+    let sent: Record<string, unknown> = {};
+    try { sent = JSON.parse(r.request().postData() || "{}"); } catch { /* keep {} */ }
+    return json(r, { ...RENEWAL_PAYMENT, ...sent });
+  });
+}
+
 // Direct customer email. `history` is what cs_customer_message returns (default none).
 export const EMAIL_TEMPLATES = [
   { key: "welcome", name: "Welcome / onboarding", subject: "Welcome to iTrova, {{business_name}}", body: "<p>Hi {{owner_name}},</p><p>Welcome to {{plan}}.</p>" },

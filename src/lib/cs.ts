@@ -353,6 +353,70 @@ export const leads = {
   },
 };
 
+// ----------------------------------------------------------------------------
+// cs_renewal_payment — manually-logged renewal payment records (Renewals module).
+// Reads are visibility-scoped; writes are Management/Admin-only (enforced by RLS).
+// ----------------------------------------------------------------------------
+export type CsRenewalPayment = {
+  id: string;
+  business_id: string;
+  paid_at: string; // date
+  amount: number | null;
+  currency: string;
+  ref_no: string | null;
+  notes: string | null;
+  plan_key: string | null;
+  cycle: string | null;
+  created_by: string | null;
+  created_at: Iso;
+  updated_at: Iso;
+};
+export type CsRenewalPaymentInsert = {
+  business_id: string;
+  paid_at?: string;
+  amount?: number | null;
+  currency?: string;
+  ref_no?: string | null;
+  notes?: string | null;
+  plan_key?: string | null;
+  cycle?: string | null;
+};
+export type CsRenewalPaymentUpdate = Partial<{
+  paid_at: string;
+  amount: number | null;
+  ref_no: string | null;
+  notes: string | null;
+  plan_key: string | null;
+  cycle: string | null;
+}>;
+
+export const renewalPayments = {
+  async list(businessId: string): Promise<CsRenewalPayment[]> {
+    const { data, error } = await supabase
+      .from("cs_renewal_payment")
+      .select("*")
+      .eq("business_id", businessId)
+      .order("paid_at", { ascending: false })
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    return (data ?? []) as CsRenewalPayment[];
+  },
+  async create(input: CsRenewalPaymentInsert): Promise<CsRenewalPayment> {
+    const { data, error } = await supabase.from("cs_renewal_payment").insert(input as object).select().single();
+    if (error) throw error;
+    return data as CsRenewalPayment;
+  },
+  async update(id: string, patch: CsRenewalPaymentUpdate): Promise<CsRenewalPayment> {
+    const { data, error } = await supabase.from("cs_renewal_payment").update(patch as object).eq("id", id).select().single();
+    if (error) throw error;
+    return data as CsRenewalPayment;
+  },
+  async remove(id: string): Promise<void> {
+    const { error } = await supabase.from("cs_renewal_payment").delete().eq("id", id);
+    if (error) throw error;
+  },
+};
+
 export const pipeline = {
   async get(businessId: string): Promise<CsPipeline | null> {
     const { data, error } = await supabase
