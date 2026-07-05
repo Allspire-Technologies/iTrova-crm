@@ -25,7 +25,9 @@ test.describe("Customer messaging (§ email)", () => {
       (r) => r.url().includes("/functions/v1/send-customer-email") && r.method() === "POST",
     );
     await page.getByRole("button", { name: "Send email" }).click();
-    await send;
+    const req = await send;
+    // The browser never chooses the recipient — the function resolves the owner server-side.
+    expect(req.postData() ?? "").not.toContain("to_email");
   });
 
   test("support can compose and send", async ({ page }) => {
