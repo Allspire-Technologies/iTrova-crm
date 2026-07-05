@@ -4,7 +4,7 @@
 // result to cs_customer_message. The Sender token + from-identity live only here (Edge Function
 // secrets), never the browser.
 //
-// Secrets:  supabase secrets set SENDER_API_TOKEN=... SENDER_FROM_EMAIL=... SENDER_FROM_NAME="iTrova"
+// Secrets:  supabase secrets set SENDER_API_KEY=... SENDER_FROM_EMAIL=... SENDER_FROM_NAME="iTrova"
 // Deploy:   supabase functions deploy send-customer-email
 // (verify_jwt stays ON — only signed-in users can call it; we additionally require admin/support.)
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -26,11 +26,12 @@ Deno.serve(async (req) => {
     const url = Deno.env.get("SUPABASE_URL")!;
     const anon = Deno.env.get("SUPABASE_ANON_KEY")!;
     const service = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const senderToken = Deno.env.get("SENDER_API_TOKEN");
+    // The token secret is stored as SENDER_API_KEY in this project (SENDER_API_TOKEN also accepted).
+    const senderToken = Deno.env.get("SENDER_API_KEY") ?? Deno.env.get("SENDER_API_TOKEN");
     const fromEmail = Deno.env.get("SENDER_FROM_EMAIL");
     const fromName = Deno.env.get("SENDER_FROM_NAME") ?? "iTrova";
     if (!senderToken || !fromEmail) {
-      return json({ error: "Email is not configured (missing SENDER_API_TOKEN / SENDER_FROM_EMAIL)." }, 500);
+      return json({ error: "Email is not configured (missing SENDER_API_KEY / SENDER_FROM_EMAIL)." }, 500);
     }
 
     // 1) Caller must be admin or support.

@@ -98,7 +98,7 @@ supabase functions deploy send-customer-email  # emails a customer via Sender.ne
 `send-customer-email` needs the Sender.net credentials as function secrets:
 
 ```bash
-supabase secrets set SENDER_API_TOKEN=... SENDER_FROM_EMAIL=... SENDER_FROM_NAME="iTrova"
+supabase secrets set SENDER_API_KEY=... SENDER_FROM_EMAIL=... SENDER_FROM_NAME="iTrova"
 ```
 
 ### Seed the first internal admin
