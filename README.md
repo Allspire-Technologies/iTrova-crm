@@ -84,6 +84,7 @@ supabase db push
 | 24 | `..701120000_plan_change_requests` | `cs_plan_change_request` + dual-control plan-change/renewal RPCs (`admin_list_plans`, `admin_request_plan_change`, `admin_approve_plan_change`, `admin_apply_plan_change`); pairs with the `execute-plan-change` Edge Function |
 | 25 | `..703140000_cs_worklist_admin` | `admin_worklist()` — cross-customer view of all Notes & CRM items |
 | 26 | `..705120000_customer_messaging` | `cs_customer_message` (send log) + `cs_email_template` (seeded); pairs with the `send-customer-email` Edge Function |
+| 27 | `..705150000_cycle_normalization` | `cs_cycle_months()` — MRR + pipeline "renewed" boundary normalized for monthly/quarterly/biannual/annual; sync trigger prices from `plan_prices_view` (discounted, actual cycle) + backfill |
 
 ### Edge Functions
 

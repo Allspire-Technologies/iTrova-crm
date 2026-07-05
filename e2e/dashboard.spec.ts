@@ -61,6 +61,32 @@ test.describe("Dashboard", () => {
     expect(overflow).toBeLessThanOrEqual(1);
   });
 
+  test("MRR normalizes non-monthly cycles (annual ₦120,000 → ₦10,000/mo)", async ({ page }) => {
+    await signIn(page, { staff: true });
+    await stubCustomers(page);
+    // One active ANNUAL subscription at ₦120,000/yr. Before the cycle fix this displayed the full
+    // ₦120,000 as monthly MRR; normalized it contributes 120000/12 = ₦10,000.
+    await page.route("**/rest/v1/rpc/admin_business_aggregates**", (r) =>
+      r.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify([
+          {
+            business_id: CUSTOMER.id, name: CUSTOMER.name, currency: "NGN",
+            owner_id: CUSTOMER.owner_id, plan_key: "pro",
+            subscription_status: "active", subscription_amount: 120000, subscription_cycle: "annual",
+            joined_at: CUSTOMER.created_at, last_login: CUSTOMER.created_at,
+          },
+        ]),
+      }),
+    );
+    await page.goto("/");
+
+    await expect(page.getByText("MRR", { exact: true })).toBeVisible();
+    await expect(page.getByText("₦10,000")).toBeVisible();
+    await expect(page.getByText("₦120,000", { exact: true })).toHaveCount(1); // only ARR (10k × 12), not MRR
+  });
+
   test("a KPI card click-through lands on a filtered Customers view", async ({ page }) => {
     await signIn(page, { staff: true });
     await stubCustomers(page);
