@@ -238,6 +238,8 @@ export async function stubCustomers(page: Page) {
   // Both the table (no arg) and the detail (p_business_id) hit the same RPC.
   await page.route("**/rest/v1/rpc/admin_business_aggregates**", (r) => json(r, [AGG]));
   await page.route("**/rest/v1/rpc/admin_dashboard_kpis**", (r) => json(r, [KPI]));
+  // Renewal Revenue card (admin-only): total recorded in cs_renewal_payment.
+  await page.route("**/rest/v1/rpc/admin_renewal_revenue**", (r) => json(r, [{ total: 350000, payment_count: 3 }]));
   await page.route("**/rest/v1/cs_health_current**", (r) => json(r, [HEALTH]));
   await page.route("**/rest/v1/cs_health_snapshot**", (r) => json(r, HEALTH_HISTORY));
   await page.route("**/rest/v1/rpc/admin_health_trend**", (r) => json(r, HEALTH_TREND));

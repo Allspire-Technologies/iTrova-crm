@@ -62,6 +62,8 @@ export type CustomersQuery = {
   atRisk?: boolean;
   active?: boolean; // login ≤ 30d
   newThisMonth?: boolean;
+  trial?: boolean; // trialing status OR free plan
+  paying?: boolean; // active status AND non-free plan
   sort?: CustomersSort;
   dir?: "asc" | "desc";
   page?: number; // 1-based
@@ -111,6 +113,8 @@ export async function listCustomersPage(q: CustomersQuery = {}): Promise<Custome
     p_at_risk: q.atRisk ?? false,
     p_active: q.active ?? false,
     p_new_this_month: q.newThisMonth ?? false,
+    p_trial: q.trial ?? false,
+    p_paying: q.paying ?? false,
     p_renewal_days: 14,
     p_sort: q.sort ?? "health",
     p_dir: q.dir ?? "asc",

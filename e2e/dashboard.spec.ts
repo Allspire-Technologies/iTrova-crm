@@ -29,7 +29,45 @@ test.describe("Dashboard", () => {
     await expect(page.getByText("Total Businesses")).toBeVisible();
     await expect(page.getByText("MRR", { exact: true })).toHaveCount(0); // revenue is admin-only
     await expect(page.getByText("ARR", { exact: true })).toHaveCount(0);
+    await expect(page.getByText("Renewal Revenue")).toHaveCount(0); // also revenue
     await expect(page.getByText("Overview of your assigned customers.")).toBeVisible();
+  });
+
+  test("shows total renewal revenue from recorded payments (admin)", async ({ page }) => {
+    await signIn(page, { staff: true });
+    await stubCustomers(page);
+    await page.goto("/");
+
+    await expect(page.getByText("Renewal Revenue")).toBeVisible();
+    await expect(page.getByText("₦350,000")).toBeVisible();
+    await expect(page.getByText("3 recorded payments")).toBeVisible();
+  });
+
+  test("a free-plan business counts as Trial, never Paying", async ({ page }) => {
+    await signIn(page, { staff: true });
+    await stubCustomers(page);
+    // One business on the FREE plan with an 'active' subscriptions row (how the sync trigger
+    // stores free businesses). It must land in Trial (1) and not in Paying (0).
+    await page.route("**/rest/v1/rpc/admin_business_aggregates**", (r) =>
+      r.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify([
+          {
+            business_id: CUSTOMER.id, name: CUSTOMER.name, currency: "NGN",
+            owner_id: CUSTOMER.owner_id, plan_key: "free",
+            subscription_status: "active", subscription_amount: 0, subscription_cycle: "monthly",
+            joined_at: CUSTOMER.created_at, last_login: null,
+          },
+        ]),
+      }),
+    );
+    await page.goto("/");
+
+    const trialCard = page.getByText("Trial Businesses").locator("xpath=..");
+    const payingCard = page.getByText("Paying Businesses").locator("xpath=..");
+    await expect(trialCard.getByText("1", { exact: true })).toBeVisible();
+    await expect(payingCard.getByText("0", { exact: true })).toBeVisible();
   });
 
   test("does not overflow horizontally on a narrow phone (long business names truncate)", async ({ page }) => {
@@ -92,8 +130,12 @@ test.describe("Dashboard", () => {
     await stubCustomers(page);
     await page.goto("/");
 
+    const req = page.waitForRequest(
+      (r) => r.url().includes("/rest/v1/rpc/admin_customers_page") && (r.postData() ?? "").includes('"p_paying":true'),
+    );
     await page.getByRole("link", { name: /Paying Businesses/ }).click();
     await expect(page).toHaveURL(/\/customers\?filter=paying$/);
+    await req; // the server-side "paying" (active AND non-free) filter is applied
     await expect(page.getByText("Paying", { exact: true })).toBeVisible(); // active-filter chip
     await expect(page.getByRole("row", { name: new RegExp(CUSTOMER.name) })).toBeVisible();
   });
