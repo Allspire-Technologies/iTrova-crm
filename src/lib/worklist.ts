@@ -27,10 +27,20 @@ export type WorklistItem = {
   due_date: string | null;
   assignee_role: string | null;
   created_at: string;
+  closed_at: string | null; // when the item reached a closed status (view-derived)
 };
 
-export type StatusGroup = "open" | "closed";
+export type StatusGroup = "open" | "closed" | "archived";
 export type WorklistFilter = { kind?: WorklistKind; group?: StatusGroup };
+
+// Closed items are ARCHIVED (hidden from the default and "closed" views, reachable via the
+// explicit Archived filter) once they've been closed for this many days. Nothing is deleted.
+export const ARCHIVE_AFTER_DAYS = 7;
+
+export function isPastArchiveWindow(closedAt: string | null | undefined): boolean {
+  if (!closedAt) return false;
+  return Date.now() - new Date(closedAt).getTime() > ARCHIVE_AFTER_DAYS * 86_400_000;
+}
 
 export const KIND_LABELS: Record<WorklistKind, string> = {
   note: "Note",
@@ -69,10 +79,11 @@ const OPEN_STATUSES: Record<string, readonly string[]> = {
   task: ["todo", "doing"],
 };
 
-export function statusGroup(item: Pick<WorklistItem, "kind" | "status">): StatusGroup | null {
+export function statusGroup(item: Pick<WorklistItem, "kind" | "status" | "closed_at">): StatusGroup | null {
   const open = OPEN_STATUSES[item.kind];
   if (!open || !item.status) return null;
-  return open.includes(item.status) ? "open" : "closed";
+  if (open.includes(item.status)) return "open";
+  return isPastArchiveWindow(item.closed_at) ? "archived" : "closed";
 }
 
 /** True for the kinds whose status can be edited inline (notes/feedback are read-only). */
@@ -86,7 +97,10 @@ export async function listWorklist(filter: WorklistFilter = {}): Promise<Worklis
   const { data, error } = await q;
   if (error) throw error;
   const items = (data ?? []) as WorklistItem[];
-  return filter.group ? items.filter((i) => statusGroup(i) === filter.group) : items;
+  // Explicit group filter shows exactly that group; the default view hides archived items
+  // (closed > ARCHIVE_AFTER_DAYS days ago) — they're reachable via the Archived filter.
+  if (filter.group) return items.filter((i) => statusGroup(i) === filter.group);
+  return items.filter((i) => statusGroup(i) !== "archived");
 }
 
 /** Dispatch an inline status change to the item's own table (with the same side-effects as the tabs). */

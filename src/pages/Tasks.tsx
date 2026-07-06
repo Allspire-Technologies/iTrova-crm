@@ -122,11 +122,12 @@ export default function Tasks() {
             <option key={r} value={r}>{ROLE_LABELS[r]}</option>
           ))}
         </select>
-        <select className={selectClass} value={filter.status ?? ""} onChange={(e) => setFilter((f) => ({ ...f, status: (e.target.value || undefined) as TaskStatus | undefined }))} aria-label="Filter by status">
+        <select className={selectClass} value={filter.status ?? ""} onChange={(e) => setFilter((f) => ({ ...f, status: (e.target.value || undefined) as TaskFilter["status"] }))} aria-label="Filter by status">
           <option value="">All statuses</option>
           {STATUSES.map((s) => (
             <option key={s} value={s} className="capitalize">{s}</option>
           ))}
+          <option value="archived">Archived (done &gt; 7 days)</option>
         </select>
         <select className={selectClass} value={filter.type ?? ""} onChange={(e) => setFilter((f) => ({ ...f, type: (e.target.value || undefined) as TaskType | undefined }))} aria-label="Filter by type">
           <option value="">All types</option>

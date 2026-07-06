@@ -2,7 +2,9 @@ import { test, expect } from "@playwright/test";
 import { signIn } from "./support/auth";
 import { CUSTOMER } from "./support/supabase";
 
-const base = { business_id: CUSTOMER.id, business_name: CUSTOMER.name, priority: null, sub_type: null, rating: null, votes: null, due_date: null, assignee_role: null };
+const base = { business_id: CUSTOMER.id, business_name: CUSTOMER.name, priority: null, sub_type: null, rating: null, votes: null, due_date: null, assignee_role: null, closed_at: null };
+
+const daysAgo = (n: number) => new Date(Date.now() - n * 86_400_000).toISOString();
 
 const WORKLIST = [
   { ...base, kind: "task", id: "wk-task-1", title: "Call Ada about renewal", status: "todo", sub_type: "follow_up", assignee_role: "cso", due_date: "2026-07-10", created_at: "2026-07-01T10:00:00Z" },
@@ -10,6 +12,9 @@ const WORKLIST = [
   { ...base, kind: "feature", id: "wk-feat-1", title: "Bulk export", status: "new", votes: 3, created_at: "2026-07-01T08:00:00Z" },
   { ...base, kind: "note", id: "wk-note-1", title: "Met Ada at the conference", status: null, sub_type: "meeting", created_at: "2026-07-01T07:00:00Z" },
   { ...base, kind: "feedback", id: "wk-fb-1", title: "Loves the new dashboard", status: null, rating: 5, created_at: "2026-07-01T06:00:00Z" },
+  // Closed items: one inside the 7-day archive window (still listed), one past it (archived).
+  { ...base, kind: "ticket", id: "wk-tik-2", title: "Fixed the printer bug", status: "resolved", created_at: daysAgo(4), closed_at: daysAgo(2) },
+  { ...base, kind: "task", id: "wk-task-2", title: "Old onboarding call", status: "done", sub_type: "call", created_at: daysAgo(40), closed_at: daysAgo(30) },
 ];
 
 async function stubWorklist(page: import("@playwright/test").Page) {
@@ -59,6 +64,28 @@ test.describe("Worklist", () => {
     await select.selectOption("done");
     await expect(select).toHaveValue("done");
     expect(patched).toMatchObject({ status: "done" });
+  });
+
+  test("archives closed items after 7 days (hidden by default, reachable via the Archived filter)", async ({ page }) => {
+    await signIn(page, { staff: true });
+    await stubWorklist(page);
+    await page.goto("/worklist");
+
+    const table = page.getByRole("table");
+    // Default view: recently-closed stays, 30-day-old closed item is archived away.
+    await expect(table.getByText("Fixed the printer bug")).toBeVisible();
+    await expect(table.getByText("Old onboarding call")).toHaveCount(0);
+
+    // "Closed / done" still excludes archived items.
+    await page.getByLabel("Filter by status").selectOption("closed");
+    await expect(table.getByText("Fixed the printer bug")).toBeVisible();
+    await expect(table.getByText("Old onboarding call")).toHaveCount(0);
+
+    // The Archived filter surfaces only the old closed item.
+    await page.getByLabel("Filter by status").selectOption("archived");
+    await expect(table.getByText("Old onboarding call")).toBeVisible();
+    await expect(table.getByText("Fixed the printer bug")).toHaveCount(0);
+    await expect(table.getByText("Call Ada about renewal")).toHaveCount(0);
   });
 
   test("filters the list by type", async ({ page }) => {

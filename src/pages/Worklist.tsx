@@ -130,6 +130,7 @@ export default function Worklist() {
           <option value="">All statuses</option>
           <option value="open">Open / needs attention</option>
           <option value="closed">Closed / done</option>
+          <option value="archived">Archived (closed &gt; 7 days)</option>
         </select>
         <Input className="h-9 w-full sm:w-64" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search item or customer…" aria-label="Search worklist" />
         {hasFilter && (
