@@ -82,10 +82,10 @@ function buildQuery(params: URLSearchParams): CustomersQuery {
       q.active = true;
       break;
     case "trial":
-      q.subscriptionStatus = "trialing";
+      q.trial = true; // trialing status OR free plan (free never counts as paying)
       break;
     case "paying":
-      q.subscriptionStatus = "active";
+      q.paying = true; // active status AND non-free plan
       break;
     case "renewal_due":
       q.renewalDue = true;

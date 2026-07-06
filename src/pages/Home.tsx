@@ -19,7 +19,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Sparkline } from "@/components/charts/Charts";
 import { getHomeData, type HomeData } from "@/lib/home";
-import { getHealthTrend, type HealthTrendPoint } from "@/lib/admin";
+import { getHealthTrend, getRenewalRevenue, type HealthTrendPoint, type RenewalRevenue } from "@/lib/admin";
 import { useAuth } from "@/contexts/AuthContext";
 import { roleSeesRevenue, roleSeesAll } from "@/lib/roles";
 import { formatDate, formatMoney } from "@/lib/format";
@@ -30,6 +30,7 @@ export default function Home() {
   const seesAll = roleSeesAll(role);
   const [data, setData] = useState<HomeData | null>(null);
   const [trend, setTrend] = useState<HealthTrendPoint[] | null>(null);
+  const [renewalRevenue, setRenewalRevenue] = useState<RenewalRevenue | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
 
@@ -61,6 +62,19 @@ export default function Home() {
     };
   }, [reloadKey]);
 
+  // Renewal revenue (recorded payments) — admin-only, off the critical path.
+  useEffect(() => {
+    if (!seesRevenue) return;
+    let cancelled = false;
+    setRenewalRevenue(null);
+    getRenewalRevenue()
+      .then((r) => !cancelled && setRenewalRevenue(r))
+      .catch(() => !cancelled && setRenewalRevenue(null));
+    return () => {
+      cancelled = true;
+    };
+  }, [seesRevenue, reloadKey]);
+
   return (
     <>
       <PageHeader title="Dashboard" subtitle={seesAll ? "Overview of all iTrova businesses." : "Overview of your assigned customers."} />
@@ -81,6 +95,15 @@ export default function Home() {
             )}
             {seesRevenue && (
               <StatCard label="ARR" value={formatMoney(data.kpis.arr, data.kpis.currency)} hint="MRR × 12" icon={TrendingUp} to="/customers?filter=paying" />
+            )}
+            {seesRevenue && (
+              <StatCard
+                label="Renewal Revenue"
+                value={renewalRevenue ? formatMoney(renewalRevenue.total, data.kpis.currency) : "—"}
+                hint={renewalRevenue ? `${renewalRevenue.paymentCount} recorded ${renewalRevenue.paymentCount === 1 ? "payment" : "payments"}` : "recorded payments"}
+                icon={Banknote}
+                to="/renewals"
+              />
             )}
             <StatCard label="Businesses At Risk" value={String(data.kpis.atRisk)} hint="Red band or churn/renewal alert" icon={AlertTriangle} to="/customers?filter=at_risk" />
             <StatCard label="Due For Renewal" value={String(data.kpis.dueRenewal)} hint="Next 14 days" icon={CalendarClock} to="/customers?filter=renewal_due" />

@@ -78,8 +78,11 @@ export async function getHomeData(): Promise<HomeData> {
     if (sinceLogin != null && sinceLogin <= ACTIVE_LOGIN_DAYS) activeBusinesses++;
 
     const renewalDays = daysUntil(a.renewalDate, now);
-    if (a.subscriptionStatus === "trialing" && (renewalDays == null || renewalDays > 0)) trialBusinesses++;
-    if (a.subscriptionStatus === "active") payingBusinesses++;
+    // Trial = trialing status OR the free plan; Paying = active on a NON-free plan (free is
+    // never "paying" — the sync trigger marks every business active, incl. free).
+    const isFree = (a.planKey ?? "free") === "free";
+    if ((a.subscriptionStatus === "trialing" && (renewalDays == null || renewalDays > 0)) || isFree) trialBusinesses++;
+    if (a.subscriptionStatus === "active" && !isFree) payingBusinesses++;
 
     if (new Date(a.joinedAt).getTime() >= monthStart) newThisMonth++;
     if (a.subscriptionStatus === "active" && a.subscriptionAmount) {

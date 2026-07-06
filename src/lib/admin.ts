@@ -117,6 +117,15 @@ export async function refreshAggregates(): Promise<void> {
   if (error) throw error;
 }
 
+/** Total money recorded in cs_renewal_payment (Renewals module). Admin-only (revenue, §3). */
+export type RenewalRevenue = { total: number; paymentCount: number };
+export async function getRenewalRevenue(): Promise<RenewalRevenue> {
+  const { data, error } = await supabase.rpc("admin_renewal_revenue");
+  if (error) throw error;
+  const row = ((data ?? []) as Row[])[0];
+  return { total: num(row?.total), paymentCount: num(row?.payment_count) };
+}
+
 // Internal staff member (candidate account manager). From admin_list_staff().
 export type StaffMember = { id: string; name: string };
 
