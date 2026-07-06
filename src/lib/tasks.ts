@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import { tasks as tasksCrud, type CsTask, type CsTaskInsert, type CsTaskUpdate, type TaskRole, type TaskType, type TaskStatus, type AlertKind } from "@/lib/cs";
+import { isPastArchiveWindow } from "@/lib/worklist";
 
 // Tasks feature (PRD §7.7): the global, assignable CS task queue. Reads the staff-gated
 // cs_task_admin view (joins the business name); writes go through the cs_task CRUD.
@@ -27,17 +28,25 @@ export const STATUS_LABELS: Record<TaskStatus, string> = {
 
 export type TaskWithBusiness = CsTask & { business_name: string | null };
 
-export type TaskFilter = { role?: TaskRole; status?: TaskStatus; type?: TaskType };
+// status also accepts "archived": done tasks completed more than ARCHIVE_AFTER_DAYS ago. Those are
+// hidden from every other view (incl. the plain "done" filter) — reachable only via this option.
+export type TaskFilter = { role?: TaskRole; status?: TaskStatus | "archived"; type?: TaskType };
+
+/** A done task past the archive window (ages by completed_at, falling back to updated_at). */
+export function isArchivedTask(t: Pick<CsTask, "status" | "completed_at" | "updated_at">): boolean {
+  return t.status === "done" && isPastArchiveWindow(t.completed_at ?? t.updated_at);
+}
 
 export async function listTasks(filter: TaskFilter = {}): Promise<TaskWithBusiness[]> {
   let q = supabase.from("cs_task_admin").select("*");
   if (filter.role) q = q.eq("assignee_role", filter.role);
-  if (filter.status) q = q.eq("status", filter.status);
+  if (filter.status) q = q.eq("status", filter.status === "archived" ? "done" : filter.status);
   if (filter.type) q = q.eq("type", filter.type);
   q = q.order("due_date", { ascending: true, nullsFirst: false }).order("created_at", { ascending: false });
   const { data, error } = await q;
   if (error) throw error;
-  return (data ?? []) as TaskWithBusiness[];
+  const rows = (data ?? []) as TaskWithBusiness[];
+  return filter.status === "archived" ? rows.filter(isArchivedTask) : rows.filter((t) => !isArchivedTask(t));
 }
 
 export function createTask(input: CsTaskInsert): Promise<CsTask> {

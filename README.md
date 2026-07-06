@@ -88,6 +88,7 @@ supabase db push
 | 28 | `..706120000_renewal_payments` | `cs_renewal_payment` — manually-logged renewal payment records (Ref No, notes) for the Renewals module; staff read (visibility-scoped), admin-only writes |
 | 29 | `..706150000_last_login_signal` | last_login = any team member's sign-in OR `last_seen` activity (was `last_sign_in_at` only, stale under persistent sessions) — fixed in the aggregates MV + health + alert engines, then everything recomputed |
 | 30 | `..706170000_trial_paying_and_renewal_revenue` | `admin_customers_page` gains `p_trial`/`p_paying` (Trial = trialing OR free plan; Paying = active AND non-free) + `admin_renewal_revenue()` for the dashboard card |
+| 31 | `..706190000_worklist_closed_at` | `cs_worklist_admin` gains `closed_at` (per-kind closure timestamp) so closed items archive out of Worklist/Tasks after 7 days (Archived filter keeps them reachable) |
 
 ### Edge Functions
 
