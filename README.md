@@ -86,6 +86,7 @@ supabase db push
 | 26 | `..705120000_customer_messaging` | `cs_customer_message` (send log) + `cs_email_template` (seeded); pairs with the `send-customer-email` Edge Function |
 | 27 | `..705150000_cycle_normalization` | `cs_cycle_months()` — MRR + pipeline "renewed" boundary normalized for monthly/quarterly/biannual/annual; sync trigger prices from `plan_prices_view` (discounted, actual cycle) + backfill |
 | 28 | `..706120000_renewal_payments` | `cs_renewal_payment` — manually-logged renewal payment records (Ref No, notes) for the Renewals module; staff read (visibility-scoped), admin-only writes |
+| 29 | `..706150000_last_login_signal` | last_login = any team member's sign-in OR `last_seen` activity (was `last_sign_in_at` only, stale under persistent sessions) — fixed in the aggregates MV + health + alert engines, then everything recomputed |
 
 ### Edge Functions
 
