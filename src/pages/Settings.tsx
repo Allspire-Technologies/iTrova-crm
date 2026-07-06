@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
-import { SlidersHorizontal, Users, ShieldCheck, Lock, UserPlus, Copy, Trash2, Mail, Plus } from "lucide-react";
+import { SlidersHorizontal, Users, ShieldCheck, Lock, UserPlus, Copy, Trash2, Mail, Plus, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/PageHeader";
 import { LoadingState } from "@/components/states/LoadingState";
@@ -86,6 +86,8 @@ function ThresholdsCard({ canEdit }: { canEdit: boolean }) {
   const [form, setForm] = useState<Record<string, number>>({});
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  // View mode by default; Edit switches the value grid to inputs (Save/Cancel return to view).
+  const [editing, setEditing] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
@@ -111,6 +113,12 @@ function ThresholdsCard({ canEdit }: { canEdit: boolean }) {
     return FIELD_GROUPS.some((g) => g.fields.some((f) => form[f.key] !== (settings as unknown as Record<string, number>)[f.key]));
   }, [form, settings]);
 
+  function resetForm(s: HealthSettings) {
+    const f: Record<string, number> = {};
+    for (const g of FIELD_GROUPS) for (const fld of g.fields) f[fld.key] = (s as unknown as Record<string, number>)[fld.key];
+    setForm(f);
+  }
+
   async function save() {
     setSaving(true);
     try {
@@ -118,6 +126,7 @@ function ThresholdsCard({ canEdit }: { canEdit: boolean }) {
       for (const g of FIELD_GROUPS) for (const f of g.fields) (patch as Record<string, number>)[f.key] = Number(form[f.key]);
       const updated = await updateHealthSettings(patch);
       setSettings(updated);
+      setEditing(false);
       toast.success("Thresholds saved — the engine uses them on the next recompute.");
     } catch (e) {
       toast.error((e as { message?: string })?.message ?? "Couldn't save settings.");
@@ -126,10 +135,20 @@ function ThresholdsCard({ canEdit }: { canEdit: boolean }) {
     }
   }
 
+  function cancel() {
+    if (settings) resetForm(settings);
+    setEditing(false);
+  }
+
   return (
     <Card>
-      <CardHeader>
+      <CardHeader className="flex-row flex-wrap items-center justify-between gap-2 space-y-0">
         <CardTitle className="flex items-center gap-2"><SlidersHorizontal className="size-4" /> Health & alert thresholds</CardTitle>
+        {canEdit && settings && !editing && (
+          <Button size="sm" variant="outline" onClick={() => setEditing(true)}>
+            <Pencil className="size-4" /> Edit
+          </Button>
+        )}
       </CardHeader>
       <CardContent>
         {error ? (
@@ -145,30 +164,42 @@ function ThresholdsCard({ canEdit }: { canEdit: boolean }) {
               <div key={g.title}>
                 <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{g.title}</h3>
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                  {g.fields.map((f) => (
-                    <label key={f.key} className="block">
-                      <span className="text-sm text-foreground">{f.label}</span>
-                      <Input
-                        type="number"
-                        min={0}
-                        disabled={!canEdit}
-                        value={form[f.key] ?? ""}
-                        onChange={(e) => setForm((prev) => ({ ...prev, [f.key]: Number(e.target.value) }))}
-                        className="mt-1"
-                      />
-                      {f.hint && <span className="mt-0.5 block text-xs text-muted-foreground">{f.hint}</span>}
-                    </label>
-                  ))}
+                  {g.fields.map((f) =>
+                    editing ? (
+                      <label key={f.key} className="block">
+                        <span className="text-sm text-foreground">{f.label}</span>
+                        <Input
+                          type="number"
+                          min={0}
+                          value={form[f.key] ?? ""}
+                          onChange={(e) => setForm((prev) => ({ ...prev, [f.key]: Number(e.target.value) }))}
+                          className="mt-1"
+                          aria-label={f.label}
+                        />
+                        {f.hint && <span className="mt-0.5 block text-xs text-muted-foreground">{f.hint}</span>}
+                      </label>
+                    ) : (
+                      // View mode: read-only values (Edit switches to inputs).
+                      <div key={f.key}>
+                        <div className="text-sm text-muted-foreground">{f.label}</div>
+                        <div className="mt-1 text-lg font-semibold text-brand-dark">
+                          {(settings as unknown as Record<string, number>)[f.key]}
+                        </div>
+                        {f.hint && <div className="text-xs text-muted-foreground">{f.hint}</div>}
+                      </div>
+                    ),
+                  )}
                 </div>
               </div>
             ))}
-            {canEdit ? (
+            {editing ? (
               <div className="flex items-center gap-3">
                 <Button onClick={save} disabled={!dirty || saving}>{saving ? "Saving…" : "Save thresholds"}</Button>
+                <Button variant="ghost" onClick={cancel} disabled={saving}>Cancel</Button>
                 {dirty && <span className="text-sm text-muted-foreground">Unsaved changes</span>}
               </div>
             ) : (
-              <AdminNote>Only Management/Admin can change thresholds.</AdminNote>
+              !canEdit && <AdminNote>Only Management/Admin can change thresholds.</AdminNote>
             )}
           </div>
         )}

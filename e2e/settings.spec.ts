@@ -9,6 +9,11 @@ test.describe("Settings (§3/§8)", () => {
     await page.goto("/settings");
 
     await expect(page.getByText("Health & alert thresholds")).toBeVisible();
+    // View mode by default: values are read-only text, no inputs until Edit is clicked.
+    await expect(page.getByText("Healthy within")).toBeVisible();
+    await expect(page.getByLabel("Healthy within")).toHaveCount(0);
+
+    await page.getByRole("button", { name: "Edit" }).first().click();
     const field = page.getByLabel("Healthy within");
     await expect(field).toHaveValue("7");
     await field.fill("10");
@@ -16,6 +21,23 @@ test.describe("Settings (§3/§8)", () => {
     const patch = page.waitForRequest((r) => r.url().includes("/rest/v1/cs_settings") && r.method() === "PATCH");
     await page.getByRole("button", { name: "Save thresholds" }).click();
     await patch;
+    // Saving returns the card to view mode.
+    await expect(page.getByLabel("Healthy within")).toHaveCount(0);
+  });
+
+  test("Cancel discards threshold edits and returns to view mode", async ({ page }) => {
+    await signIn(page, { staff: true });
+    await stubSettings(page);
+    await page.goto("/settings");
+
+    await page.getByRole("button", { name: "Edit" }).first().click();
+    await page.getByLabel("Healthy within").fill("99");
+    await page.getByRole("button", { name: "Cancel" }).first().click();
+
+    // Back to view mode with the original value intact.
+    await expect(page.getByLabel("Healthy within")).toHaveCount(0);
+    await expect(page.getByText("Health & alert thresholds")).toBeVisible();
+    await expect(page.getByText("99")).toHaveCount(0);
   });
 
   test("shows the role matrix and account-manager assignment", async ({ page }) => {
@@ -93,6 +115,7 @@ test.describe("Settings (§3/§8)", () => {
 
     await expect(page.getByText("Only Management/Admin can change thresholds")).toBeVisible();
     await expect(page.getByRole("button", { name: "Save thresholds" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Edit", exact: true })).toHaveCount(0); // no edit toggle either
     await expect(page.getByLabel(`Role for ${MANAGER.name}`)).toHaveCount(0); // read-only, no select
     await expect(page.getByLabel("New staff email")).toHaveCount(0); // no invite form for non-admin
   });
