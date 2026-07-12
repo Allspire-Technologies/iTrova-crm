@@ -57,7 +57,7 @@ test.describe("Customer messaging (§ email)", () => {
     await stubCustomers(page);
     await stubMessaging(page, {
       history: [
-        { id: "m1", business_id: CUSTOMER.id, to_email: "ada@mamaput.example", subject: "Welcome to iTrova", template_key: "welcome", status: "sent", error: null, created_at: CUSTOMER.created_at },
+        { id: "m1", business_id: CUSTOMER.id, to_email: "ada@mamaput.example", subject: "Welcome to iTrova", template_key: "welcome", status: "sent", error: null, created_at: CUSTOMER.created_at, created_by: "u1", created_by_name: "Bola Adeyemi" },
       ],
     });
     await openMessages(page);
@@ -65,6 +65,7 @@ test.describe("Customer messaging (§ email)", () => {
     await expect(page.getByText("Only Management/Admin and Support can email customers.")).toBeVisible();
     await expect(page.getByRole("button", { name: "Send email" })).toHaveCount(0);
     await expect(page.getByText("Welcome to iTrova")).toBeVisible(); // history still readable
+    await expect(page.getByText(/by Bola Adeyemi/)).toBeVisible(); // the log shows who sent it
   });
 
   test("send is disabled when the customer has no owner email", async ({ page }) => {

@@ -303,7 +303,8 @@ export const EMAIL_TEMPLATES = [
 ];
 export async function stubMessaging(page: Page, opts: { history?: unknown[] } = {}) {
   await page.route("**/rest/v1/cs_email_template**", (r) => json(r, EMAIL_TEMPLATES));
-  await page.route("**/rest/v1/cs_customer_message**", (r) => json(r, opts.history ?? []));
+  // History comes from the cs_customer_messages RPC (resolves the sender name server-side).
+  await page.route("**/rest/v1/rpc/cs_customer_messages**", (r) => json(r, opts.history ?? []));
   // The function resolves the recipient server-side and echoes it back.
   await page.route("**/functions/v1/send-customer-email**", (r) => json(r, { ok: true, id: "msg-1", to_email: "ada@mamaput.example" }));
 }

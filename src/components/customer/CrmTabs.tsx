@@ -549,7 +549,7 @@ function MessagesTab({ customer }: { customer: MessageCustomer }) {
               <span className="shrink-0 text-xs text-muted-foreground">{formatRelative(m.createdAt)}</span>
             </div>
             <div className="mt-1 truncate text-xs text-muted-foreground">
-              To {m.toEmail}{m.templateKey ? ` · ${m.templateKey}` : ""}
+              To {m.toEmail}{m.templateKey ? ` · ${m.templateKey}` : ""}{m.sentByName ? ` · by ${m.sentByName}` : ""}
             </div>
             {m.error && <div className="mt-1 text-xs text-destructive">{m.error}</div>}
           </Row>

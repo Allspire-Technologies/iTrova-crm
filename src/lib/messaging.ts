@@ -16,6 +16,7 @@ export type CustomerMessage = {
   status: MessageStatus;
   error: string | null;
   createdAt: string;
+  sentByName: string | null; // staff member who sent it (resolved server-side)
 };
 
 /** Merge fields available to templates + freeform. */
@@ -63,13 +64,11 @@ export async function deleteTemplate(key: string): Promise<void> {
   if (error) throw error;
 }
 
-/** Past messages sent to a business (visibility-scoped by RLS), newest first. */
+/** Past messages sent to a business (visibility-scoped, newest first), each with the staff member
+ *  who sent it. Uses the cs_customer_messages RPC because the sender name (created_by → auth.users)
+ *  can only be resolved server-side. */
 export async function listCustomerMessages(businessId: string): Promise<CustomerMessage[]> {
-  const { data, error } = await supabase
-    .from("cs_customer_message")
-    .select("id, business_id, to_email, subject, template_key, status, error, created_at")
-    .eq("business_id", businessId)
-    .order("created_at", { ascending: false });
+  const { data, error } = await supabase.rpc("cs_customer_messages", { p_business_id: businessId });
   if (error) throw error;
   return ((data ?? []) as Record<string, unknown>[]).map((r) => ({
     id: String(r.id),
@@ -80,6 +79,7 @@ export async function listCustomerMessages(businessId: string): Promise<Customer
     status: String(r.status) as MessageStatus,
     error: r.error == null ? null : String(r.error),
     createdAt: String(r.created_at),
+    sentByName: r.created_by_name == null ? null : String(r.created_by_name),
   }));
 }
 
