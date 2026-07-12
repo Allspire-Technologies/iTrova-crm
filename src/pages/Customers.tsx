@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowDown, ArrowUp, Building2, ChevronLeft, ChevronRight, Search, Trash2, X } from "lucide-react";
+import { ArrowDown, ArrowUp, Building2, ChevronLeft, ChevronRight, Search, Send, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { deleteBusiness } from "@/lib/admin";
@@ -25,7 +25,8 @@ import { getCustomersFacets, type CustomersFacets } from "@/lib/admin";
 import { accountAssignment } from "@/lib/cs";
 import type { HealthBand } from "@/lib/cs";
 import { useAuth } from "@/contexts/AuthContext";
-import { roleSeesAll } from "@/lib/roles";
+import { roleSeesAll, roleCanMessageCustomers } from "@/lib/roles";
+import { BulkMessageDialog } from "@/components/BulkMessageDialog";
 import { formatDate, formatRelative } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -116,7 +117,9 @@ export default function Customers() {
   const authRole = useAuth().role;
   const canAssign = authRole === "admin"; // assigning account managers is Management/Admin-only (§3)
   const canDelete = authRole === "admin"; // deleting a business is Management/Admin-only
+  const canMessage = roleCanMessageCustomers(authRole); // Management/Admin + Support may email customers
   const seesAll = roleSeesAll(authRole); // Support sees only assigned customers
+  const [bulkSend, setBulkSend] = useState(false);
   const [facets, setFacets] = useState<CustomersFacets | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkManager, setBulkManager] = useState("");
@@ -431,20 +434,29 @@ export default function Customers() {
           </div>
         )}
 
-        {/* Bulk action bar (Management/Admin only) */}
-        {canAssign && selected.size > 0 && (
+        {/* Bulk action bar (assign is Management/Admin; messaging is Management/Admin + Support) */}
+        {(canAssign || canMessage) && selected.size > 0 && (
           <div className="flex flex-wrap items-center gap-3 rounded-lg border border-brand/30 bg-secondary/50 px-4 py-2.5">
             <span className="text-sm font-medium text-brand-dark">{selected.size} selected</span>
-            <select className={selectClass} value={bulkManager} onChange={(e) => setBulkManager(e.target.value)} aria-label="Assign account manager">
-              <option value="">Assign account manager…</option>
-              <option value="none">Unassign</option>
-              {facets?.managers.map((m) => (
-                <option key={m.id} value={m.id}>{m.name}</option>
-              ))}
-            </select>
-            <Button size="sm" onClick={applyBulkAssign} disabled={bulkManager === "" || assigning}>
-              {assigning ? "Applying…" : "Apply"}
-            </Button>
+            {canAssign && (
+              <>
+                <select className={selectClass} value={bulkManager} onChange={(e) => setBulkManager(e.target.value)} aria-label="Assign account manager">
+                  <option value="">Assign account manager…</option>
+                  <option value="none">Unassign</option>
+                  {facets?.managers.map((m) => (
+                    <option key={m.id} value={m.id}>{m.name}</option>
+                  ))}
+                </select>
+                <Button size="sm" onClick={applyBulkAssign} disabled={bulkManager === "" || assigning}>
+                  {assigning ? "Applying…" : "Apply"}
+                </Button>
+              </>
+            )}
+            {canMessage && (
+              <Button size="sm" variant="outline" onClick={() => setBulkSend(true)}>
+                <Send className="size-4" /> Send message
+              </Button>
+            )}
             <button type="button" onClick={() => setSelected(new Set())} className="text-sm text-muted-foreground hover:text-foreground">
               Clear selection
             </button>
@@ -647,6 +659,14 @@ export default function Customers() {
           </div>
         </div>
       </div>
+
+      <BulkMessageDialog
+        open={bulkSend}
+        onOpenChange={setBulkSend}
+        initialRecipients={rows
+          .filter((r) => selected.has(r.businessId))
+          .map((r) => ({ businessId: r.businessId, name: r.name, ownerName: r.ownerName, planKey: r.planKey, renewalDate: r.renewalDate }))}
+      />
 
       <ConfirmDialog
         open={!!pendingDelete}

@@ -103,12 +103,14 @@ Deno.serve(async (req) => {
       const payload = await res.json().catch(() => ({}));
       if (!res.ok) {
         const message = payload?.message ?? payload?.error ?? `Sender returned ${res.status}`;
-        await admin.from("cs_customer_message").insert({ ...logRow, status: "failed", error: String(message) });
+        const { error: e1 } = await admin.from("cs_customer_message").insert({ ...logRow, status: "failed", error: String(message) });
+        if (e1) console.error("cs_customer_message log insert failed (send failed path):", e1.message);
         return json({ error: String(message) }, 502);
       }
       providerId = payload?.data?.id ?? payload?.id ?? null;
     } catch (e) {
-      await admin.from("cs_customer_message").insert({ ...logRow, status: "failed", error: (e as Error)?.message ?? "send failed" });
+      const { error: e2 } = await admin.from("cs_customer_message").insert({ ...logRow, status: "failed", error: (e as Error)?.message ?? "send failed" });
+      if (e2) console.error("cs_customer_message log insert failed (provider unreachable path):", e2.message);
       return json({ error: "Couldn't reach the email provider." }, 502);
     }
 
@@ -117,7 +119,12 @@ Deno.serve(async (req) => {
       .insert({ ...logRow, status: "sent", provider_message_id: providerId })
       .select()
       .single();
-    if (logErr) return json({ ok: true, id: null, to_email }); // email sent; logging failed — don't fail the send
+    if (logErr) {
+      // The email went out but we couldn't record it — surface WHY in the function logs (this is the
+      // usual reason the Messages log looks empty) without failing the send for the user.
+      console.error("cs_customer_message log insert failed (sent path):", logErr.message);
+      return json({ ok: true, id: null, to_email, logged: false });
+    }
 
     return json({ ok: true, id: inserted.id, to_email });
   } catch (e) {

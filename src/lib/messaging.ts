@@ -83,6 +83,45 @@ export async function listCustomerMessages(businessId: string): Promise<Customer
   }));
 }
 
+/** One row of the central Messages log — a send to any customer, with business + sender resolved. */
+export type MessageLogEntry = {
+  id: string;
+  businessId: string;
+  businessName: string;
+  toEmail: string;
+  subject: string;
+  templateKey: string | null;
+  status: MessageStatus;
+  error: string | null;
+  createdAt: string;
+  sentByName: string | null;
+};
+
+/** Central log of customer emails across ALL customers (visibility-scoped server-side), newest
+ *  first. Powers the Messages module. Optional subject/business/recipient search + status filter. */
+export async function listMessageLog(
+  opts: { search?: string; status?: MessageStatus | null; limit?: number } = {},
+): Promise<MessageLogEntry[]> {
+  const { data, error } = await supabase.rpc("cs_message_log", {
+    p_search: opts.search?.trim() || null,
+    p_status: opts.status ?? null,
+    p_limit: opts.limit ?? 200,
+  });
+  if (error) throw error;
+  return ((data ?? []) as Record<string, unknown>[]).map((r) => ({
+    id: String(r.id),
+    businessId: String(r.business_id),
+    businessName: String(r.business_name),
+    toEmail: String(r.to_email),
+    subject: String(r.subject),
+    templateKey: r.template_key == null ? null : String(r.template_key),
+    status: String(r.status) as MessageStatus,
+    error: r.error == null ? null : String(r.error),
+    createdAt: String(r.created_at),
+    sentByName: r.created_by_name == null ? null : String(r.created_by_name),
+  }));
+}
+
 export type SendEmailInput = {
   businessId: string;
   subject: string;
