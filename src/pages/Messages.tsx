@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Mail, Search, Send } from "lucide-react";
+import { ChevronLeft, ChevronRight, Mail, Search, Send } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/states/EmptyState";
 import { LoadingState } from "@/components/states/LoadingState";
@@ -14,6 +14,8 @@ import { listMessageLog, type MessageLogEntry, type MessageStatus } from "@/lib/
 import { formatRelative } from "@/lib/format";
 import { useAuth } from "@/contexts/AuthContext";
 import { roleCanMessageCustomers } from "@/lib/roles";
+
+const PAGE_SIZE = 50;
 
 const selectClass =
   "h-9 rounded-md border border-input bg-background px-2 text-sm text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring";
@@ -34,6 +36,8 @@ export default function Messages() {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<"" | MessageStatus>("");
   const [rows, setRows] = useState<MessageLogEntry[] | null>(null);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [reloadKey, setReloadKey] = useState(0);
@@ -46,14 +50,18 @@ export default function Messages() {
     return () => clearTimeout(t);
   }, [search]);
 
+  // Any filter change returns to the first page.
+  useEffect(() => { setPage(1); }, [debouncedSearch, status]);
+
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    listMessageLog({ search: debouncedSearch, status: status || null })
-      .then((r) => {
+    listMessageLog({ search: debouncedSearch, status: status || null, limit: PAGE_SIZE, offset: (page - 1) * PAGE_SIZE })
+      .then((res) => {
         if (cancelled) return;
-        setRows(r);
+        setRows(res.rows);
+        setTotal(res.total);
         setLoading(false);
       })
       .catch((e) => {
@@ -64,26 +72,30 @@ export default function Messages() {
     return () => {
       cancelled = true;
     };
-  }, [debouncedSearch, status, reloadKey]);
+  }, [debouncedSearch, status, page, reloadKey]);
 
   const subtitle = useMemo(() => {
-    if (!rows) return "Every customer email sent from the CRM.";
-    const n = rows.length;
-    return `${n}${n === 500 ? "+" : ""} ${n === 1 ? "message" : "messages"}${search || status ? " match your filters" : ""}`;
-  }, [rows, search, status]);
+    if (rows == null) return "Every customer email sent from the CRM.";
+    return `${total} ${total === 1 ? "message" : "messages"}${search || status ? " match your filters" : ""}`;
+  }, [rows, total, search, status]);
 
-  if (error && !rows) {
-    return (
-      <>
-        <PageHeader title="Messages" subtitle="Every customer email sent from the CRM." />
-        <ErrorState message={error} onRetry={() => setReloadKey((k) => k + 1)} />
-      </>
-    );
-  }
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const from = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
+  const to = Math.min(page * PAGE_SIZE, total);
 
   const sendButton = canSend ? (
     <Button onClick={() => setComposing(true)}><Send className="size-4" /> Send message</Button>
   ) : undefined;
+
+  if (error && rows == null) {
+    return (
+      <>
+        <PageHeader title="Messages" subtitle="Every customer email sent from the CRM." action={sendButton} />
+        <ErrorState message={error} onRetry={() => setReloadKey((k) => k + 1)} />
+        <BulkMessageDialog open={composing} onOpenChange={setComposing} onSent={() => setReloadKey((k) => k + 1)} />
+      </>
+    );
+  }
 
   return (
     <>
@@ -109,9 +121,9 @@ export default function Messages() {
           </select>
         </div>
 
-        {!rows ? (
+        {rows == null ? (
           <LoadingState label="Loading messages…" />
-        ) : rows.length === 0 ? (
+        ) : total === 0 ? (
           <EmptyState
             icon={Mail}
             title="No messages yet"
@@ -176,7 +188,22 @@ export default function Messages() {
               ))}
             </div>
 
-            {loading && <p className="text-sm text-muted-foreground">Updating…</p>}
+            {/* Pagination */}
+            <div className="flex items-center justify-between gap-4 text-sm text-muted-foreground">
+              <span>
+                Showing {from}–{to} of {total}
+                {loading && <span className="ml-2 opacity-70">Updating…</span>}
+              </span>
+              <div className="flex items-center gap-2">
+                <span>Page {page} of {totalPages}</span>
+                <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>
+                  <ChevronLeft className="size-4" /> Prev
+                </Button>
+                <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>
+                  Next <ChevronRight className="size-4" />
+                </Button>
+              </div>
+            </div>
           </>
         )}
       </div>

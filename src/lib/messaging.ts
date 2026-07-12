@@ -97,18 +97,23 @@ export type MessageLogEntry = {
   sentByName: string | null;
 };
 
+export type MessageLogPage = { rows: MessageLogEntry[]; total: number };
+
 /** Central log of customer emails across ALL customers (visibility-scoped server-side), newest
- *  first. Powers the Messages module. Optional subject/business/recipient search + status filter. */
+ *  first, paginated. Powers the Messages module. Optional subject/business/recipient search + status
+ *  filter; `total` is the full filtered count for the pager. */
 export async function listMessageLog(
-  opts: { search?: string; status?: MessageStatus | null; limit?: number } = {},
-): Promise<MessageLogEntry[]> {
+  opts: { search?: string; status?: MessageStatus | null; limit?: number; offset?: number } = {},
+): Promise<MessageLogPage> {
   const { data, error } = await supabase.rpc("cs_message_log", {
     p_search: opts.search?.trim() || null,
     p_status: opts.status ?? null,
-    p_limit: opts.limit ?? 200,
+    p_limit: opts.limit ?? 50,
+    p_offset: opts.offset ?? 0,
   });
   if (error) throw error;
-  return ((data ?? []) as Record<string, unknown>[]).map((r) => ({
+  const raw = (data ?? []) as Record<string, unknown>[];
+  const rows = raw.map((r) => ({
     id: String(r.id),
     businessId: String(r.business_id),
     businessName: String(r.business_name),
@@ -120,6 +125,7 @@ export async function listMessageLog(
     createdAt: String(r.created_at),
     sentByName: r.created_by_name == null ? null : String(r.created_by_name),
   }));
+  return { rows, total: raw.length ? Number(raw[0].total_count) || 0 : 0 };
 }
 
 export type SendEmailInput = {
