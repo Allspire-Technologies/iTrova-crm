@@ -9,6 +9,7 @@ import {
   Inbox,
   CalendarClock,
   ListChecks,
+  Mail,
   Settings,
   LogOut,
   ShieldCheck,
@@ -24,6 +25,7 @@ const nav = [
   { to: "/pipeline", label: "Pipeline", icon: Workflow },
   { to: "/worklist", label: "Worklist", icon: Inbox },
   { to: "/renewals", label: "Renewals", icon: CalendarClock },
+  { to: "/messages", label: "Messages", icon: Mail },
   { to: "/tasks", label: "Tasks", icon: ListChecks },
   { to: "/settings", label: "Settings", icon: Settings },
 ];

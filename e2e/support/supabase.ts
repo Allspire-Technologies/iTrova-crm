@@ -309,6 +309,11 @@ export async function stubMessaging(page: Page, opts: { history?: unknown[] } = 
   await page.route("**/functions/v1/send-customer-email**", (r) => json(r, { ok: true, id: "msg-1", to_email: "ada@mamaput.example" }));
 }
 
+// The central Messages module log (cs_message_log RPC — all customers, sender + business resolved).
+export async function stubMessageLog(page: Page, rows: unknown[] = []) {
+  await page.route("**/rest/v1/rpc/cs_message_log**", (r) => json(r, rows));
+}
+
 // Dual-control plan change (§ plan change). The signed-in admin is FAKE_USER; a second admin is
 // OTHER_ADMIN. `active` sets the row admin_get_plan_change returns (null = no in-flight request).
 export const OTHER_ADMIN = "22222222-2222-2222-2222-222222222222";
