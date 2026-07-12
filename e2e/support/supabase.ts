@@ -310,8 +310,11 @@ export async function stubMessaging(page: Page, opts: { history?: unknown[] } = 
 }
 
 // The central Messages module log (cs_message_log RPC — all customers, sender + business resolved).
-export async function stubMessageLog(page: Page, rows: unknown[] = []) {
-  await page.route("**/rest/v1/rpc/cs_message_log**", (r) => json(r, rows));
+// The RPC carries the full filtered count on each row (total_count) for the pager; inject it here so
+// tests only need to supply the visible rows. Pass `total` to simulate more pages than are returned.
+export async function stubMessageLog(page: Page, rows: unknown[] = [], total?: number) {
+  const withCount = rows.map((r) => ({ ...(r as Record<string, unknown>), total_count: total ?? rows.length }));
+  await page.route("**/rest/v1/rpc/cs_message_log**", (r) => json(r, withCount));
 }
 
 // Dual-control plan change (§ plan change). The signed-in admin is FAKE_USER; a second admin is

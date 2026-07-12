@@ -50,6 +50,22 @@ test.describe("Messages module", () => {
     await expect(page.getByText("No messages yet")).toBeVisible();
   });
 
+  test("paginates when there are more than a page of messages", async ({ page }) => {
+    await signIn(page, { staff: true });
+    await stubMessageLog(page, ROWS, 60); // 60 total → 2 pages at 50/page
+    await page.goto("/messages");
+
+    await expect(page.getByText(/of 60/)).toBeVisible();
+    await expect(page.getByText(/Page 1 of 2/)).toBeVisible();
+    await expect(page.getByRole("button", { name: /Prev/ })).toBeDisabled();
+    await expect(page.getByRole("button", { name: /Next/ })).toBeEnabled();
+
+    await page.getByRole("button", { name: /Next/ }).click();
+    await expect(page.getByText(/Page 2 of 2/)).toBeVisible();
+    await expect(page.getByRole("button", { name: /Prev/ })).toBeEnabled();
+    await expect(page.getByRole("button", { name: /Next/ })).toBeDisabled();
+  });
+
   test("Send message: compose to a customer picked from the list", async ({ page }) => {
     await signIn(page, { staff: true });
     await stubCustomers(page); // powers the recipient picker search
