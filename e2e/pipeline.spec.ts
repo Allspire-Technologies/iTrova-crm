@@ -174,7 +174,9 @@ test.describe("Customer Success Pipeline (§7.6)", () => {
     await stubPipeline(page);
     await page.goto("/pipeline");
 
-    const card = page.getByText(CUSTOMER.name);
+    // .first(): after the drop, the optimistic re-render can briefly show the card in both the old
+    // and new columns — an ambiguous locator then fails strict mode at the dragend dispatch.
+    const card = page.getByText(CUSTOMER.name).first();
     const powerUserColumn = page.getByText("Power User", { exact: true }).locator("xpath=ancestor::div[2]");
     await expect(card).toBeVisible();
 
