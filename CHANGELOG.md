@@ -3,6 +3,19 @@
 Notable changes to the iTrova CRM (Admin OS). The format follows
 [Keep a Changelog](https://keepachangelog.com/); entries are grouped by ship date, newest first.
 
+## 2026-07-14 — Fix: deleting a business with sales or ledger data
+
+### Fixed
+- **Admin → Delete business** failed with a foreign-key error (`sale_items_product_id_fkey`) for any
+  business that had recorded sales — and would have failed on ledger data next. The delete now clears
+  the two non-cascading references (sale items and journal lines) before removing the business, so a
+  business with full trading and accounting history deletes cleanly.
+
+### Notes
+- One migration on the shared iTrova project re-declares `admin_delete_business` (already applied).
+- Deliberately fixed in the delete-business path only — product and ledger references stay protected,
+  so a normal product or account deletion still can't wipe sale history or journal lines.
+
 ## 2026-07-12 — Messages
 
 A place to see and send customer emails across your whole book of business — not just one customer at
