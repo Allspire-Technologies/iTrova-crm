@@ -29,12 +29,15 @@ import {
   listTemplates,
   listCustomerMessages,
   sendCustomerEmail,
+  logWhatsapp,
   renderTemplate,
   richTextIsEmpty,
+  htmlToPlainText,
   type EmailTemplate,
   type CustomerMessage,
   type MergeVars,
 } from "@/lib/messaging";
+import { customerWaNumber, isValidWaNumber, waLink } from "@/lib/whatsapp";
 // Static import is fine: CrmTabs is itself a lazy chunk, so TipTap stays out of the main bundle.
 import RichTextEditor from "@/components/RichTextEditor";
 import { useAuth } from "@/contexts/AuthContext";
@@ -445,12 +448,14 @@ function TasksTab({ businessId }: { businessId: string }) {
   );
 }
 
-// --------------------------------------------------------------------------- Messages (email)
+// --------------------------------------------------------------------------- Messages (email + WhatsApp)
 export type MessageCustomer = {
   id: string;
   name: string;
   ownerName: string | null;
   ownerEmail: string | null;
+  whatsappNumber: string | null;
+  phone: string | null;
   planKey: string | null;
   renewalDate: string | null;
 };
@@ -459,11 +464,13 @@ const cap = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
 
 function MessagesTab({ customer }: { customer: MessageCustomer }) {
   const canSend = roleCanMessageCustomers(useAuth().role);
+  const [channel, setChannel] = useState<"email" | "whatsapp">("email");
   const [templates, setTemplates] = useState<EmailTemplate[]>([]);
   const [history, setHistory] = useState<CustomerMessage[] | null>(null);
   const [templateKey, setTemplateKey] = useState(""); // "" = freeform
   const [subject, setSubject] = useState("");
-  const [body, setBody] = useState("");
+  const [body, setBody] = useState("");           // email: rich-text HTML
+  const [waText, setWaText] = useState("");        // whatsapp: plain text
   const [sending, setSending] = useState(false);
 
   const vars: MergeVars = {
@@ -472,6 +479,8 @@ function MessagesTab({ customer }: { customer: MessageCustomer }) {
     plan: cap(customer.planKey ?? "—"),
     renewal_date: customer.renewalDate ? formatDate(customer.renewalDate) : "—",
   };
+  const waNumber = customerWaNumber(customer.whatsappNumber, customer.phone);
+  const hasWaNumber = isValidWaNumber(customer.whatsappNumber) || isValidWaNumber(customer.phone);
 
   useEffect(() => {
     if (canSend) listTemplates().then(setTemplates).catch((e) => toast.error(msg(e)));
@@ -480,30 +489,23 @@ function MessagesTab({ customer }: { customer: MessageCustomer }) {
     listCustomerMessages(customer.id).then(setHistory).catch((e) => toast.error(msg(e)));
   }, [customer.id]);
 
+  // Re-apply the picked template when switching channel, since email carries HTML + subject and
+  // WhatsApp is plain text with no subject.
   function pickTemplate(key: string) {
     setTemplateKey(key);
     const t = templates.find((x) => x.key === key);
     setSubject(t ? renderTemplate(t.subject, vars) : "");
     setBody(t ? renderTemplate(t.body, vars) : "");
+    setWaText(t ? htmlToPlainText(renderTemplate(t.body, vars)) : "");
   }
 
-  async function send() {
+  async function sendEmail() {
     if (!customer.ownerEmail || !subject.trim() || richTextIsEmpty(body)) return;
     setSending(true);
     try {
-      // The recipient is resolved server-side (always the owner's account email); ownerEmail here
-      // is only the UI preview/guard. The rich-text editor emits HTML for both freeform and
-      // template bodies, so it's sent as-is.
-      const sentTo = await sendCustomerEmail({
-        businessId: customer.id,
-        subject: subject.trim(),
-        html: body,
-        templateKey: templateKey || null,
-      });
+      const sentTo = await sendCustomerEmail({ businessId: customer.id, subject: subject.trim(), html: body, templateKey: templateKey || null });
       toast.success(`Email sent to ${sentTo || customer.ownerEmail}.`);
-      setSubject("");
-      setBody("");
-      setTemplateKey("");
+      setSubject(""); setBody(""); setTemplateKey("");
       listCustomerMessages(customer.id).then(setHistory).catch(() => {});
     } catch (e) {
       toast.error(msg(e));
@@ -512,44 +514,92 @@ function MessagesTab({ customer }: { customer: MessageCustomer }) {
     }
   }
 
+  async function sendWhatsapp() {
+    if (!hasWaNumber || !waText.trim()) return;
+    // Open WhatsApp with the number + text; the staff member taps Send. Then log it (best-effort).
+    window.open(waLink(waNumber, waText.trim()), "_blank", "noopener,noreferrer");
+    try {
+      await logWhatsapp({ businessId: customer.id, toPhone: waNumber, toName: customer.ownerName, body: waText.trim(), templateKey: templateKey || null });
+      toast.success("Opened WhatsApp — send the message there.");
+      setWaText(""); setTemplateKey("");
+      listCustomerMessages(customer.id).then(setHistory).catch(() => {});
+    } catch (e) {
+      toast.error(msg(e)); // the link still opened; only the log failed
+    }
+  }
+
   return (
     <div className="space-y-4">
       {canSend ? (
         <div className="space-y-2 rounded-lg border border-border/60 bg-secondary/30 p-3">
           <div className="flex flex-wrap items-center gap-2">
-            <select className={selectClass} value={templateKey} onChange={(e) => pickTemplate(e.target.value)} aria-label="Email template">
+            {/* Channel toggle */}
+            <div className="inline-flex overflow-hidden rounded-md border border-border">
+              <button type="button" onClick={() => setChannel("email")}
+                className={cn("px-3 py-1 text-xs font-medium", channel === "email" ? "bg-brand text-white" : "bg-background text-muted-foreground hover:text-foreground")}>
+                Email
+              </button>
+              <button type="button" onClick={() => setChannel("whatsapp")}
+                className={cn("px-3 py-1 text-xs font-medium", channel === "whatsapp" ? "bg-brand text-white" : "bg-background text-muted-foreground hover:text-foreground")}>
+                WhatsApp
+              </button>
+            </div>
+            <select className={selectClass} value={templateKey} onChange={(e) => pickTemplate(e.target.value)} aria-label="Message template">
               <option value="">Freeform</option>
-              {templates.map((t) => (
-                <option key={t.key} value={t.key}>{t.name}</option>
-              ))}
+              {templates.map((t) => (<option key={t.key} value={t.key}>{t.name}</option>))}
             </select>
-            <span className="text-xs text-muted-foreground">To: {customer.ownerEmail ?? "— no owner email on file"}</span>
+            <span className="text-xs text-muted-foreground">
+              {channel === "email"
+                ? `To: ${customer.ownerEmail ?? "— no owner email on file"}`
+                : `To: ${hasWaNumber ? `+${waNumber}` : "— no WhatsApp/phone number on file"}`}
+            </span>
           </div>
-          <Input value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Subject" aria-label="Email subject" />
-          <RichTextEditor value={body} onChange={setBody} placeholder="Write your message…" ariaLabel="Email body" className="bg-background" />
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-xs text-muted-foreground">One-way — replies aren’t monitored.</span>
-            <Button size="sm" onClick={send} disabled={sending || !customer.ownerEmail || !subject.trim() || richTextIsEmpty(body)}>
-              {sending ? "Sending…" : "Send email"}
-            </Button>
-          </div>
+
+          {channel === "email" ? (
+            <>
+              <Input value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Subject" aria-label="Email subject" />
+              <RichTextEditor value={body} onChange={setBody} placeholder="Write your message…" ariaLabel="Email body" className="bg-background" />
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs text-muted-foreground">One-way — replies aren’t monitored.</span>
+                <Button size="sm" onClick={sendEmail} disabled={sending || !customer.ownerEmail || !subject.trim() || richTextIsEmpty(body)}>
+                  {sending ? "Sending…" : "Send email"}
+                </Button>
+              </div>
+            </>
+          ) : (
+            <>
+              <textarea
+                value={waText} onChange={(e) => setWaText(e.target.value)} rows={5}
+                placeholder="Write your WhatsApp message…" aria-label="WhatsApp message"
+                className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              />
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs text-muted-foreground">Opens WhatsApp with your message — send it there.</span>
+                <Button size="sm" onClick={sendWhatsapp} disabled={!hasWaNumber || !waText.trim()}>Send on WhatsApp</Button>
+              </div>
+            </>
+          )}
         </div>
       ) : (
-        <Empty label="Only Management/Admin and Support can email customers." />
+        <Empty label="Only Management/Admin and Support can message customers." />
       )}
 
       <ul className="space-y-2">
         {history == null && <Empty label="Loading…" />}
-        {history?.length === 0 && <Empty label="No emails sent yet." />}
+        {history?.length === 0 && <Empty label="No messages sent yet." />}
         {history?.map((m) => (
           <Row key={m.id}>
             <div className="flex items-center justify-between gap-2">
-              <span className="min-w-0 flex-1 truncate font-medium text-brand-dark">{m.subject}</span>
+              <span className="min-w-0 flex-1 truncate font-medium text-brand-dark">
+                {m.channel === "whatsapp" ? (m.subject ?? "WhatsApp message") : m.subject}
+              </span>
+              <Badge variant="outline" className="shrink-0">{m.channel === "whatsapp" ? "WhatsApp" : "Email"}</Badge>
               <Badge variant={m.status === "failed" ? "destructive" : "secondary"}>{m.status}</Badge>
               <span className="shrink-0 text-xs text-muted-foreground">{formatRelative(m.createdAt)}</span>
             </div>
             <div className="mt-1 truncate text-xs text-muted-foreground">
-              To {m.toEmail}{m.templateKey ? ` · ${m.templateKey}` : ""}{m.sentByName ? ` · by ${m.sentByName}` : ""}
+              To {m.channel === "whatsapp" ? (m.toPhone ? `+${m.toPhone}` : "—") : m.toEmail}
+              {m.templateKey ? ` · ${m.templateKey}` : ""}{m.sentByName ? ` · by ${m.sentByName}` : ""}
             </div>
             {m.error && <div className="mt-1 text-xs text-destructive">{m.error}</div>}
           </Row>

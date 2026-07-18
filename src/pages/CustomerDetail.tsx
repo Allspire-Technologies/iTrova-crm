@@ -308,6 +308,8 @@ export default function CustomerDetail() {
                   name: data.name,
                   ownerName: owner?.name ?? null,
                   ownerEmail: data.ownerEmail,
+                  whatsappNumber: data.whatsappNumber ?? null,
+                  phone: owner?.phone ?? null,
                   planKey: data.planKey,
                   renewalDate: sub?.currentPeriodEnd ?? null,
                 }}

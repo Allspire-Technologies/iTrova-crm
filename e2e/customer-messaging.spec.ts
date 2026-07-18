@@ -18,7 +18,7 @@ test.describe("Customer messaging (§ email)", () => {
     await openMessages(page);
 
     // Pick a template → subject/body prefill with merge fields applied.
-    await page.getByLabel("Email template").selectOption("welcome");
+    await page.getByLabel("Message template").selectOption("welcome");
     await expect(page.getByLabel("Email subject")).toHaveValue(/Mama Put Foods/);
 
     const send = page.waitForRequest(
@@ -62,7 +62,7 @@ test.describe("Customer messaging (§ email)", () => {
     });
     await openMessages(page);
 
-    await expect(page.getByText("Only Management/Admin and Support can email customers.")).toBeVisible();
+    await expect(page.getByText("Only Management/Admin and Support can message customers.")).toBeVisible();
     await expect(page.getByRole("button", { name: "Send email" })).toHaveCount(0);
     await expect(page.getByText("Welcome to iTrova")).toBeVisible(); // history still readable
     await expect(page.getByText(/by Bola Adeyemi/)).toBeVisible(); // the log shows who sent it
@@ -83,5 +83,34 @@ test.describe("Customer messaging (§ email)", () => {
     await page.getByLabel("Email subject").fill("Hello");
     await page.getByLabel("Email body").fill("A message.");
     await expect(page.getByRole("button", { name: "Send email" })).toBeDisabled();
+  });
+
+  test("an admin messages the customer on WhatsApp (opens wa.me + logs it)", async ({ page }) => {
+    await signIn(page, { staff: true });
+    await stubCustomers(page);
+    await stubMessaging(page);
+    // Capture window.open so the wa.me link doesn't actually navigate.
+    await page.addInitScript(() => {
+      (window as unknown as { __opened: string[] }).__opened = [];
+      window.open = (url?: string | URL) => { (window as unknown as { __opened: string[] }).__opened.push(String(url)); return null; };
+    });
+    await openMessages(page);
+
+    // Switch to WhatsApp and pick a template → the body prefills as PLAIN TEXT (no HTML tags).
+    await page.getByRole("button", { name: "WhatsApp", exact: true }).click();
+    await expect(page.getByText(/To: \+2348100000000/)).toBeVisible();
+    await page.getByLabel("Message template").selectOption("welcome");
+    const box = page.getByLabel("WhatsApp message");
+    await expect(box).toHaveValue(/Welcome to/);
+    await expect(box).not.toHaveValue(/</); // rich text was flattened
+
+    const log = page.waitForRequest((r) => r.url().includes("/rest/v1/rpc/cs_log_whatsapp") && r.method() === "POST");
+    await page.getByRole("button", { name: "Send on WhatsApp" }).click();
+    const req = await log;
+    // Logged to the resolved number, channel-tagged server-side.
+    expect(req.postData() ?? "").toContain("2348100000000");
+    // wa.me was opened with the number + prefilled text.
+    const opened = await page.evaluate(() => (window as unknown as { __opened: string[] }).__opened);
+    expect(opened.some((u) => u.startsWith("https://wa.me/2348100000000?text="))).toBe(true);
   });
 });
