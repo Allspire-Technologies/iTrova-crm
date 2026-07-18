@@ -6,18 +6,39 @@ import { supabase } from "@/integrations/supabase/client";
 
 export type EmailTemplate = { key: string; name: string; subject: string; body: string };
 
-export type MessageStatus = "queued" | "sent" | "failed";
+export type MessageStatus = "queued" | "sent" | "failed" | "opened";
+export type MessageChannel = "email" | "whatsapp";
 export type CustomerMessage = {
   id: string;
   businessId: string;
-  toEmail: string;
-  subject: string;
+  channel: MessageChannel;
+  toEmail: string | null;   // null for WhatsApp
+  toPhone: string | null;   // null for email
+  subject: string | null;   // null for WhatsApp
   templateKey: string | null;
   status: MessageStatus;
   error: string | null;
   createdAt: string;
   sentByName: string | null; // staff member who sent it (resolved server-side)
 };
+
+/** Strip a rich-text/HTML template body down to plain text for WhatsApp (no HTML, no subject).
+ *  Block tags become newlines; entities are decoded; runs of blank lines collapse. */
+export function htmlToPlainText(html: string): string {
+  return html
+    .replace(/<\s*(br|\/p|\/div|\/li|\/h[1-6])\s*>/gi, "\n")
+    .replace(/<li[^>]*>/gi, "• ")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/&quot;/gi, '"')
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
 
 /** Merge fields available to templates + freeform. */
 export type MergeVars = {
@@ -73,8 +94,10 @@ export async function listCustomerMessages(businessId: string): Promise<Customer
   return ((data ?? []) as Record<string, unknown>[]).map((r) => ({
     id: String(r.id),
     businessId: String(r.business_id),
-    toEmail: String(r.to_email),
-    subject: String(r.subject),
+    channel: (r.channel === "whatsapp" ? "whatsapp" : "email") as MessageChannel,
+    toEmail: r.to_email == null ? null : String(r.to_email),
+    toPhone: r.to_phone == null ? null : String(r.to_phone),
+    subject: r.subject == null ? null : String(r.subject),
     templateKey: r.template_key == null ? null : String(r.template_key),
     status: String(r.status) as MessageStatus,
     error: r.error == null ? null : String(r.error),
@@ -83,13 +106,31 @@ export async function listCustomerMessages(businessId: string): Promise<Customer
   }));
 }
 
+/** Log a WhatsApp send (a wa.me link was opened). Server verifies the caller may message the
+ *  customer. Returns the new log row id. */
+export async function logWhatsapp(input: {
+  businessId: string; toPhone: string; toName: string | null; body: string; templateKey?: string | null;
+}): Promise<string> {
+  const { data, error } = await supabase.rpc("cs_log_whatsapp", {
+    p_business_id: input.businessId,
+    p_to_phone: input.toPhone,
+    p_to_name: input.toName,
+    p_body: input.body,
+    p_template_key: input.templateKey ?? null,
+  });
+  if (error) throw error;
+  return String(data);
+}
+
 /** One row of the central Messages log — a send to any customer, with business + sender resolved. */
 export type MessageLogEntry = {
   id: string;
   businessId: string;
   businessName: string;
-  toEmail: string;
-  subject: string;
+  channel: MessageChannel;
+  toEmail: string | null;
+  toPhone: string | null;
+  subject: string | null;
   templateKey: string | null;
   status: MessageStatus;
   error: string | null;
@@ -117,8 +158,10 @@ export async function listMessageLog(
     id: String(r.id),
     businessId: String(r.business_id),
     businessName: String(r.business_name),
-    toEmail: String(r.to_email),
-    subject: String(r.subject),
+    channel: (r.channel === "whatsapp" ? "whatsapp" : "email") as MessageChannel,
+    toEmail: r.to_email == null ? null : String(r.to_email),
+    toPhone: r.to_phone == null ? null : String(r.to_phone),
+    subject: r.subject == null ? null : String(r.subject),
     templateKey: r.template_key == null ? null : String(r.template_key),
     status: String(r.status) as MessageStatus,
     error: r.error == null ? null : String(r.error),

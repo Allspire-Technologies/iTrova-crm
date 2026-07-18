@@ -22,6 +22,7 @@ const selectClass =
 
 const STATUSES: { value: MessageStatus; label: string }[] = [
   { value: "sent", label: "Sent" },
+  { value: "opened", label: "Opened (WhatsApp)" },
   { value: "failed", label: "Failed" },
   { value: "queued", label: "Queued" },
 ];
@@ -148,10 +149,12 @@ export default function Messages() {
                     <TableRow key={m.id} className="cursor-pointer" onClick={() => navigate(`/customers/${m.businessId}`)}>
                       <TableCell>
                         <div className="font-medium text-brand-dark">{m.businessName}</div>
-                        <div className="text-xs text-muted-foreground">{m.toEmail}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {m.channel === "whatsapp" ? "WhatsApp" : "Email"} · {m.channel === "whatsapp" ? (m.toPhone ? `+${m.toPhone}` : "—") : (m.toEmail ?? "—")}
+                        </div>
                       </TableCell>
                       <TableCell>
-                        <div className="max-w-[28rem] truncate text-foreground">{m.subject}</div>
+                        <div className="max-w-[28rem] truncate text-foreground">{m.subject ?? (m.channel === "whatsapp" ? "WhatsApp message" : "—")}</div>
                         {m.error && <div className="max-w-[28rem] truncate text-xs text-destructive">{m.error}</div>}
                       </TableCell>
                       <TableCell className="whitespace-nowrap text-muted-foreground">{m.sentByName ?? "—"}</TableCell>
@@ -174,11 +177,13 @@ export default function Messages() {
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <div className="truncate font-medium text-brand-dark">{m.businessName}</div>
-                      <div className="truncate text-xs text-muted-foreground">{m.toEmail}</div>
+                      <div className="truncate text-xs text-muted-foreground">
+                        {m.channel === "whatsapp" ? "WhatsApp" : "Email"} · {m.channel === "whatsapp" ? (m.toPhone ? `+${m.toPhone}` : "—") : (m.toEmail ?? "—")}
+                      </div>
                     </div>
                     <StatusBadge status={m.status} />
                   </div>
-                  <div className="mt-2 truncate text-sm text-foreground">{m.subject}</div>
+                  <div className="mt-2 truncate text-sm text-foreground">{m.subject ?? (m.channel === "whatsapp" ? "WhatsApp message" : "—")}</div>
                   {m.error && <div className="mt-1 truncate text-xs text-destructive">{m.error}</div>}
                   <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
                     <span>{m.sentByName ? `by ${m.sentByName}` : "—"}</span>
