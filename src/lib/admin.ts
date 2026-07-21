@@ -179,14 +179,14 @@ export async function getPipelineBoard(): Promise<PipelineCard[]> {
   }));
 }
 
-// Profile extras the aggregate doesn't carry (industry + owner email), for the detail page.
-export type BusinessProfileExtra = { industry: string | null; ownerEmail: string | null };
+// Profile extras the aggregate doesn't carry (industry, owner email, referral codes), for the detail page.
+export type BusinessProfileExtra = { industry: string | null; ownerEmail: string | null; referredByCode: string | null; referralCode: string | null };
 
 export async function getBusinessProfileExtra(businessId: string): Promise<BusinessProfileExtra> {
   const { data, error } = await supabase.rpc("admin_business_profile", { p_business_id: businessId });
   if (error) throw error;
   const r = (((data ?? []) as Row[])[0] ?? {}) as Row;
-  return { industry: str(r.industry), ownerEmail: str(r.owner_email) };
+  return { industry: str(r.industry), ownerEmail: str(r.owner_email), referredByCode: str(r.referred_by_code), referralCode: str(r.referral_code) };
 }
 
 // 30/90-day usage trends for the Customer Detail "Product Usage" section (lazy-loaded).
