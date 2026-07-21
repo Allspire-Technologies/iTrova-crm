@@ -199,6 +199,8 @@ export default function CustomerDetail() {
               <Field label="Phone">{owner?.phone ?? data.whatsappNumber ?? "—"}</Field>
               <Field label="Email">{data.ownerEmail ?? "—"}</Field>
               <Field label="Industry">{data.industry ?? "—"}</Field>
+              <Field label="Referred by">{data.referredByCode ?? "—"}</Field>
+              <Field label="Referral code">{data.referralCode ?? "—"}</Field>
               <Field label="Plan"><PlanBadge planKey={data.planKey} /></Field>
               <Field label="Renewal date">{formatDate(sub?.currentPeriodEnd)}</Field>
               <Field label="Pipeline stage">{stage ? STAGE_LABELS[stage.stage] : "—"}</Field>

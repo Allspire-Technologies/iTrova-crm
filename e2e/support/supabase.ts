@@ -445,3 +445,23 @@ export async function stubTasks(page: Page) {
   });
   await page.route("**/rest/v1/cs_task_admin**", (r) => json(r, [TASK_ROW]));
 }
+
+// Referrals module: config, registry, applications queue, and the cs_referrals RPC.
+export async function stubReferrals(page: Page, opts: { referrers?: unknown[]; applications?: unknown[]; referred?: unknown[] } = {}) {
+  await page.route("**/rest/v1/referral_config**", (r) =>
+    json(r, r.request().headers()["accept"]?.includes("vnd.pgrst.object")
+      ? { id: true, affiliate_share_percent: 25, referee_discount_percent: 20, business_free_months: 1, business_referrals_per_free_month: 3, staff_bonus: { pro: 2000, business: 5000, enterprise: 10000 } }
+      : [{ id: true, affiliate_share_percent: 25, referee_discount_percent: 20, business_free_months: 1, business_referrals_per_free_month: 3, staff_bonus: { pro: 2000, business: 5000, enterprise: 10000 } }]));
+  await page.route("**/rest/v1/cs_referrer**", (r) => {
+    const m = r.request().method();
+    if (m === "POST") { let sent = {}; try { sent = JSON.parse(r.request().postData() || "{}"); } catch { /* {} */ } return json(r, [sent]); }
+    if (m === "PATCH") return json(r, []);
+    return json(r, opts.referrers ?? []);
+  });
+  await page.route("**/rest/v1/cs_referrer_application**", (r) => {
+    if (r.request().method() === "PATCH") return json(r, []);
+    return json(r, opts.applications ?? []);
+  });
+  await page.route("**/rest/v1/rpc/cs_referrals**", (r) => json(r, opts.referred ?? []));
+  await page.route("**/functions/v1/send-referrer-welcome**", (r) => json(r, { ok: true, to_email: "ada@x.example" }));
+}
