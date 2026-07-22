@@ -47,10 +47,45 @@ export type ReferredBusiness = {
   matched: boolean;
 };
 
+export type ReferrerSummary = {
+  code: string; name: string; kind: ReferrerKind; phone: string | null; email: string | null;
+  active: boolean; businessId: string | null; sharePercent: number;
+  referredCount: number; convertedCount: number; earned: number; paid: number; accrued: number;
+  bankName: string | null; accountNumber: string | null; accountName: string | null;
+};
+
 export async function getReferralConfig(): Promise<ReferralConfig> {
   const { data, error } = await sb.from("referral_config").select("*").maybeSingle();
   if (error) throw error;
-  return (data ?? { affiliate_share_percent: 25, referee_discount_percent: 20, business_free_months: 1, business_referrals_per_free_month: 3, staff_bonus: {} }) as ReferralConfig;
+  return (data ?? { affiliate_share_percent: 25, business_share_percent: 25, referee_discount_percent: 20, staff_bonus: {} }) as ReferralConfig;
+}
+
+/** All referrers (affiliates/staff + businesses that generated a code) with earned/paid/accrued. */
+export async function listReferrerSummary(search?: string): Promise<ReferrerSummary[]> {
+  const { data, error } = await sb.rpc("cs_referrers_summary", { p_search: search?.trim() || null });
+  if (error) throw error;
+  return ((data ?? []) as Record<string, unknown>[]).map((r) => ({
+    code: String(r.code), name: String(r.name), kind: String(r.kind) as ReferrerKind,
+    phone: r.phone == null ? null : String(r.phone), email: r.email == null ? null : String(r.email),
+    active: Boolean(r.active), businessId: r.business_id == null ? null : String(r.business_id),
+    sharePercent: Number(r.effective_share_percent) || 0,
+    referredCount: Number(r.referred_count) || 0, convertedCount: Number(r.converted_count) || 0,
+    earned: Number(r.earned) || 0, paid: Number(r.paid) || 0, accrued: Number(r.accrued) || 0,
+    bankName: r.bank_name == null ? null : String(r.bank_name),
+    accountNumber: r.account_number == null ? null : String(r.account_number),
+    accountName: r.account_name == null ? null : String(r.account_name),
+  }));
+}
+
+/** Record a payout: cash (affiliate/staff, pass code) or subscription credit (business, pass
+ *  businessId — auto-extends their renewal). Returns whole months added (subscription only). */
+export async function recordPayout(input: { code?: string | null; businessId?: string | null; amount: number; kind: "cash" | "subscription"; note?: string }): Promise<number> {
+  const { data, error } = await sb.rpc("cs_record_payout", {
+    p_code: input.code ?? null, p_business_id: input.businessId ?? null,
+    p_amount: input.amount, p_kind: input.kind, p_note: input.note ?? null,
+  });
+  if (error) throw error;
+  return Number(data) || 0;
 }
 
 export async function updateReferralConfig(patch: Partial<ReferralConfig>): Promise<void> {

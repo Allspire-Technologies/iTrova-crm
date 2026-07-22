@@ -59,16 +59,56 @@ test.describe("Referrals module", () => {
     await expect(page.getByText("Only Management/Admin can change")).toBeVisible();
   });
 
-  test("admin approves an affiliate application from the queue", async ({ page }) => {
+  test("approving an application auto-creates the affiliate (registry insert + status update)", async ({ page }) => {
     await signIn(page, { staff: true });
     await stubReferrals(page, { applications: [
-      { id: "app-1", name: "Tunde Bello", phone: "08030000000", email: "tunde@x.example", how_promote: "WhatsApp groups", status: "pending", created_at: "2026-07-17T00:00:00Z" },
+      { id: "app-1", name: "Tunde Bello", phone: "08030000305", email: "tunde@x.example", how_promote: "WhatsApp groups", status: "pending", created_at: "2026-07-17T00:00:00Z" },
     ] });
     await page.goto("/referrals");
     await page.getByRole("tab", { name: /Applications/ }).click();
     await expect(page.getByText("Tunde Bello")).toBeVisible();
+    const insert = page.waitForRequest((r) => r.url().includes("/rest/v1/cs_referrer") && !r.url().includes("application") && r.method() === "POST");
     const patch = page.waitForRequest((r) => r.url().includes("/rest/v1/cs_referrer_application") && r.method() === "PATCH");
     await page.getByRole("button", { name: "Approve" }).click();
-    await patch;
+    const req = await insert; await patch;
+    // Created as an affiliate with the code suggested from the applicant's name + last-4 phone.
+    expect(req.postData() ?? "").toContain('"kind":"affiliate"');
+    expect(req.postData() ?? "").toContain("TUNDEBELLO0305");
+  });
+
+  test("admin marks an affiliate's accrued balance paid (confirm dialog → payout RPC)", async ({ page }) => {
+    await signIn(page, { staff: true });
+    await stubReferrals(page, { summary: [
+      { code: "ADAOBI0305", name: "Ada Obi", kind: "affiliate", phone: "0810", email: "ada@x.example", active: true, business_id: null, effective_share_percent: 25, referred_count: 3, converted_count: 2, earned: 30000, paid: 0, accrued: 30000, bank_name: "GTB", account_number: "0123456789", account_name: "Ada Obi" },
+    ] });
+    await page.goto("/referrals");
+    await page.getByRole("tab", { name: "Referrers" }).click();
+    await expect(page.getByText("Ada Obi")).toBeVisible();
+    await expect(page.getByRole("cell", { name: /30,000/ }).last()).toBeVisible(); // accrued
+    await page.getByRole("button", { name: "Mark paid" }).click();
+    await expect(page.getByRole("heading", { name: "Mark payout as paid" })).toBeVisible();
+    const payout = page.waitForRequest((r) => r.url().includes("/rest/v1/rpc/cs_record_payout") && r.method() === "POST");
+    await page.getByRole("button", { name: "Confirm paid" }).click();
+    const req = await payout;
+    expect(req.postData() ?? "").toContain('"p_kind":"cash"');
+    expect(req.postData() ?? "").toContain('"p_amount":30000');
+  });
+
+  test("a business referrer shows on Referrers and its credit applies to their subscription", async ({ page }) => {
+    await signIn(page, { staff: true });
+    await stubReferrals(page, { summary: [
+      { code: "SUNRISE7811", name: "Sunrise Stores", kind: "business", phone: "0817", email: null, active: true, business_id: "biz-1", effective_share_percent: 25, referred_count: 4, converted_count: 3, earned: 60000, paid: 0, accrued: 60000, bank_name: null, account_number: null, account_name: null },
+    ] });
+    await page.goto("/referrals");
+    await page.getByRole("tab", { name: "Referrers" }).click();
+    await expect(page.getByText("Sunrise Stores")).toBeVisible();
+    await expect(page.getByRole("cell", { name: "Business" })).toBeVisible();
+    await page.getByRole("button", { name: "Apply credit" }).click();
+    await expect(page.getByRole("heading", { name: "Apply credit to subscription" })).toBeVisible();
+    const payout = page.waitForRequest((r) => r.url().includes("/rest/v1/rpc/cs_record_payout") && r.method() === "POST");
+    await page.getByRole("button", { name: "Apply credit", exact: true }).nth(1).click();
+    const req = await payout;
+    expect(req.postData() ?? "").toContain('"p_kind":"subscription"');
+    expect(req.postData() ?? "").toContain('"p_business_id":"biz-1"');
   });
 });
