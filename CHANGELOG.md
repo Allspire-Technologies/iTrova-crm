@@ -3,6 +3,28 @@
 Notable changes to the iTrova CRM (Admin OS). The format follows
 [Keep a Changelog](https://keepachangelog.com/); entries are grouped by ship date, newest first.
 
+## 2026-07-22 — Referrals module
+
+Track who refers new businesses, what each referral is worth, and pay it out.
+
+### Added
+- **Referrals page** with a **Referrers** tab covering everyone who refers: affiliates and staff from
+  the registry **plus** businesses that generated their own code — each with referrals made, earned,
+  and **accrued** balance.
+- **Applications queue** — affiliate signups from the website. **Approve** now auto-creates the
+  affiliate (with a suggested `name + last-4-phone` code) and emails them their details.
+- **Payouts** — **Mark paid** records a cash payout to an affiliate or staff member; **Apply credit**
+  puts a referring business's accrued balance toward their iTrova subscription, auto-extending their
+  renewal by whole plan-months (any remainder stays as credit). Both open a confirm dialog with an
+  editable amount defaulting to the full accrued balance.
+- **Program settings** — separate share rates for **affiliates** (paid as cash) and **business
+  referrers** (subscription credit), the referee first-payment discount, and the staff per-conversion
+  bonus (SPIFF). Nothing is hardcoded.
+
+### Notes
+- One migration on the shared iTrova project adds the referrer registry, applications, payout ledger,
+  and the summary/payout/earnings functions. Apply the iTrova migration first, then this one.
+
 ## 2026-07-14 — Fix: deleting a business with sales or ledger data
 
 ### Fixed

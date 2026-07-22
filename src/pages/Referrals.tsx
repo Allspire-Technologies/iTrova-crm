@@ -13,8 +13,8 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import {
   getReferralConfig, updateReferralConfig, listReferrers, saveReferrer, setReferrerActive, sendReferrerWelcome,
-  listApplications, setApplicationStatus, listReferredBusinesses,
-  type Referrer, type ReferrerApplication, type ReferredBusiness,
+  listApplications, setApplicationStatus, listReferredBusinesses, listReferrerSummary, recordPayout,
+  type Referrer, type ReferrerApplication, type ReferredBusiness, type ReferrerSummary,
 } from "@/lib/referrals";
 import { rewardFor, suggestCode, type ReferralConfig, type ReferrerKind } from "@/lib/referralMath";
 
@@ -112,9 +112,7 @@ function ReferredTab({ config, seesMoney }: { config: ReferralConfig; seesMoney:
                     <TableCell className="whitespace-nowrap text-muted-foreground">{formatDate(r.signedUpAt)}</TableCell>
                     <TableCell>{r.converted ? <Badge>Paying</Badge> : <Badge variant="secondary">Signed up</Badge>}</TableCell>
                     {seesMoney && <TableCell className="text-right tabular-nums">{r.converted ? formatMoney(r.totalPaid12m) : "—"}</TableCell>}
-                    {seesMoney && <TableCell className="text-right tabular-nums font-medium">
-                      {!r.converted ? "—" : r.referrerKind === "business" ? <span className="text-xs font-normal text-muted-foreground">counts toward free month</span> : formatMoney(rw.cash)}
-                    </TableCell>}
+                    {seesMoney && <TableCell className="text-right tabular-nums font-medium">{!r.converted ? "—" : formatMoney(rw.cash)}{r.referrerKind === "business" && r.converted ? <span className="block text-[10px] font-normal text-muted-foreground">as credit</span> : null}</TableCell>}
                   </TableRow>
                 );
               })}
@@ -130,10 +128,18 @@ function ReferredTab({ config, seesMoney }: { config: ReferralConfig; seesMoney:
 const EMPTY_REFERRER: Referrer = { code: "", name: "", kind: "affiliate", phone: "", email: "", bankName: "", accountNumber: "", accountName: "", sharePercent: null, active: true, notes: "" };
 
 function ReferrersTab({ isAdmin, config, seesMoney }: { isAdmin: boolean; config: ReferralConfig | null; seesMoney: boolean }) {
-  const [rows, setRows] = useState<Referrer[] | null>(null);
+  const [rows, setRows] = useState<ReferrerSummary[] | null>(null);
   const [editing, setEditing] = useState<{ r: Referrer; isNew: boolean } | null>(null);
-  const load = () => listReferrers().then(setRows).catch((e) => toast.error(msg(e)));
+  const [payout, setPayout] = useState<ReferrerSummary | null>(null);
+  const load = () => listReferrerSummary().then(setRows).catch((e) => toast.error(msg(e)));
   useEffect(() => { load(); }, []);
+
+  // Only affiliate/staff (in cs_referrer) are editable here; businesses opt in from their portal.
+  const editRegistry = async (code: string) => {
+    const all = await listReferrers().catch(() => [] as Referrer[]);
+    const found = all.find((x) => x.code === code);
+    if (found) setEditing({ r: found, isNew: false });
+  };
 
   return (
     <div className="space-y-3">
@@ -142,18 +148,30 @@ function ReferrersTab({ isAdmin, config, seesMoney }: { isAdmin: boolean; config
         <div className="overflow-x-auto rounded-xl border border-border/60">
           <Table>
             <TableHeader>
-              <TableRow><TableHead>Code</TableHead><TableHead>Name</TableHead><TableHead>Type</TableHead><TableHead>Phone</TableHead>{seesMoney && <TableHead className="text-right">Share</TableHead>}<TableHead></TableHead></TableRow>
+              <TableRow>
+                <TableHead>Code</TableHead><TableHead>Name</TableHead><TableHead>Type</TableHead>
+                <TableHead className="text-right">Referrals</TableHead>
+                {seesMoney && <TableHead className="text-right">Earned</TableHead>}
+                {seesMoney && <TableHead className="text-right">Accrued</TableHead>}
+                <TableHead></TableHead>
+              </TableRow>
             </TableHeader>
             <TableBody>
-              {rows.length === 0 && <TableRow><TableCell colSpan={6} className="py-8 text-center text-muted-foreground">No referrers registered yet.</TableCell></TableRow>}
+              {rows.length === 0 && <TableRow><TableCell colSpan={7} className="py-8 text-center text-muted-foreground">No referrers yet.</TableCell></TableRow>}
               {rows.map((r) => (
                 <TableRow key={r.code} className={r.active ? "" : "opacity-50"}>
                   <TableCell className="font-mono text-xs font-semibold">{r.code}</TableCell>
                   <TableCell className="font-medium text-brand-dark">{r.name}</TableCell>
                   <TableCell><Badge variant="secondary">{KIND_LABEL[r.kind]}</Badge></TableCell>
-                  <TableCell className="text-muted-foreground">{r.phone}</TableCell>
-                  {seesMoney && <TableCell className="text-right text-muted-foreground">{r.kind === "affiliate" ? `${r.sharePercent ?? config?.affiliate_share_percent ?? "—"}%` : "—"}</TableCell>}
-                  <TableCell className="text-right">{isAdmin && <Button variant="ghost" size="sm" onClick={() => setEditing({ r, isNew: false })}>Edit</Button>}</TableCell>
+                  <TableCell className="text-right text-muted-foreground">{r.convertedCount}/{r.referredCount}</TableCell>
+                  {seesMoney && <TableCell className="text-right tabular-nums text-muted-foreground">{formatMoney(r.earned)}</TableCell>}
+                  {seesMoney && <TableCell className="text-right tabular-nums font-medium text-brand-dark">{formatMoney(r.accrued)}</TableCell>}
+                  <TableCell className="text-right whitespace-nowrap">
+                    {isAdmin && r.accrued > 0 && (
+                      <Button variant="ghost" size="sm" onClick={() => setPayout(r)}>{r.kind === "business" ? "Apply credit" : "Mark paid"}</Button>
+                    )}
+                    {isAdmin && r.kind !== "business" && <Button variant="ghost" size="sm" onClick={() => editRegistry(r.code)}>Edit</Button>}
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -161,6 +179,50 @@ function ReferrersTab({ isAdmin, config, seesMoney }: { isAdmin: boolean; config
         </div>
       )}
       {editing && <ReferrerForm state={editing} config={config} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); load(); }} onToggle={async (code, active) => { await setReferrerActive(code, active); load(); }} />}
+      {payout && <PayoutDialog r={payout} onClose={() => setPayout(null)} onDone={() => { setPayout(null); load(); }} />}
+    </div>
+  );
+}
+
+// Confirm + amount dialog: cash payout (affiliate/staff) or subscription credit (business).
+function PayoutDialog({ r, onClose, onDone }: { r: ReferrerSummary; onClose: () => void; onDone: () => void }) {
+  const isBusiness = r.kind === "business";
+  const [amount, setAmount] = useState(String(Math.round(r.accrued)));
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const confirm = async () => {
+    const amt = Number(amount);
+    if (!amt || amt <= 0) return toast.error("Enter an amount");
+    if (amt > r.accrued + 0.5) return toast.error("Amount exceeds the accrued balance");
+    setBusy(true);
+    try {
+      const months = await recordPayout({
+        code: isBusiness ? null : r.code, businessId: isBusiness ? r.businessId : null,
+        amount: amt, kind: isBusiness ? "subscription" : "cash", note: note || undefined,
+      });
+      toast.success(isBusiness ? (months > 0 ? `Credited — subscription extended by ${months} month${months === 1 ? "" : "s"}` : "Credit recorded") : `Marked ${formatMoney(amt)} paid to ${r.name}`);
+      onDone();
+    } catch (e) { toast.error(msg(e)); } finally { setBusy(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" onClick={onClose}>
+      <div className="w-full max-w-sm space-y-3 rounded-xl border border-border bg-card p-5" onClick={(e) => e.stopPropagation()}>
+        <h3 className="font-display text-lg font-semibold text-brand-dark">{isBusiness ? "Apply credit to subscription" : "Mark payout as paid"}</h3>
+        <p className="text-sm text-muted-foreground">
+          {isBusiness
+            ? <>Apply {r.name}'s referral credit to their iTrova subscription. Whole plan-months are added to their renewal; any remainder stays as credit.</>
+            : <>Record a payout to {r.name}{r.bankName ? ` (${r.bankName} · ${r.accountNumber})` : ""}.</>}
+        </p>
+        <div className="text-sm">Accrued balance: <span className="font-semibold text-brand-dark">{formatMoney(r.accrued)}</span></div>
+        <label className="block text-xs text-muted-foreground">Amount<Input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} /></label>
+        <label className="block text-xs text-muted-foreground">Note (optional)<Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Ref no / period" /></label>
+        <div className="flex justify-end gap-2 pt-1">
+          <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
+          <Button size="sm" onClick={confirm} disabled={busy}>{busy ? "Saving…" : isBusiness ? "Apply credit" : "Confirm paid"}</Button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -251,8 +313,19 @@ function ApplicationsTab({ isAdmin, onChange }: { isAdmin: boolean; onChange: ()
   const load = () => listApplications().then(setRows).catch((e) => toast.error(msg(e)));
   useEffect(() => { load(); }, []);
 
-  const act = async (id: string, status: "approved" | "rejected") => {
-    try { await setApplicationStatus(id, status); toast.success(status === "approved" ? "Approved — add them under Referrers" : "Rejected"); load(); onChange(); }
+  const approve = async (a: ReferrerApplication) => {
+    try {
+      // Create the affiliate registry entry (suggested code), mark approved, and email them.
+      const code = suggestCode(a.name, a.phone);
+      await saveReferrer({ code, name: a.name, kind: "affiliate", phone: a.phone, email: a.email, bankName: null, accountNumber: null, accountName: null, sharePercent: null, active: true, notes: "From website application" }, true);
+      await setApplicationStatus(a.id, "approved");
+      try { if (a.email) await sendReferrerWelcome(code); } catch (e) { toast.warning(`Affiliate created, but the email didn't send: ${msg(e)}`); }
+      toast.success(`Approved — ${a.name} added as an affiliate (${code})`);
+      load(); onChange();
+    } catch (e) { toast.error(msg(e)); }
+  };
+  const reject = async (id: string) => {
+    try { await setApplicationStatus(id, "rejected"); toast.success("Rejected"); load(); onChange(); }
     catch (e) { toast.error(msg(e)); }
   };
 
@@ -270,7 +343,7 @@ function ApplicationsTab({ isAdmin, onChange }: { isAdmin: boolean; onChange: ()
               <TableCell className="max-w-sm text-sm text-muted-foreground">{a.howPromote || "—"}</TableCell>
               <TableCell><Badge variant={a.status === "approved" ? "default" : a.status === "rejected" ? "destructive" : "secondary"}>{a.status}</Badge></TableCell>
               {isAdmin && <TableCell className="text-right whitespace-nowrap">
-                {a.status === "pending" && <><Button variant="ghost" size="sm" onClick={() => act(a.id, "approved")}>Approve</Button><Button variant="ghost" size="sm" onClick={() => act(a.id, "rejected")}>Reject</Button></>}
+                {a.status === "pending" && <><Button variant="ghost" size="sm" onClick={() => approve(a)}>Approve</Button><Button variant="ghost" size="sm" onClick={() => reject(a.id)}>Reject</Button></>}
               </TableCell>}
             </TableRow>
           ))}
@@ -296,10 +369,9 @@ function SettingsTab({ isAdmin, config, onSaved }: { isAdmin: boolean; config: R
   const cancel = () => { setC(config); setEditing(false); };
 
   const rows: { label: string; key: keyof ReferralConfig; suffix?: string }[] = [
-    { label: "Affiliate share of first-year revenue", key: "affiliate_share_percent", suffix: "%" },
+    { label: "Affiliate share of first-year revenue (cash payout)", key: "affiliate_share_percent", suffix: "%" },
+    { label: "Business referrer share of first-year revenue (subscription credit)", key: "business_share_percent", suffix: "%" },
     { label: "Referee first-payment discount", key: "referee_discount_percent", suffix: "%" },
-    { label: "Referrals a business needs for a free month", key: "business_referrals_per_free_month" },
-    { label: "Free months granted at that threshold", key: "business_free_months" },
   ];
 
   return (
