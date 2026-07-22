@@ -343,4 +343,29 @@ end $$;
 revoke all on function public.my_referral_earnings() from public, anon;
 grant execute on function public.my_referral_earnings() to authenticated;
 
+-- ---------------------------------------------------------------- referee first-payment discount (for iTrova)
+-- The discount THIS business qualifies for on its first payment, applied automatically in iTrova's
+-- Billing tab. Returns 0 unless the business was referred by a VALID code (a registered affiliate/
+-- staff referrer OR another business's own code) AND has never made a real paid subscription (a paid
+-- grant sets subscription_cycle; a trial never does). Manual admin flows are unaffected.
+create or replace function public.my_referee_discount()
+returns numeric
+language plpgsql stable security definer set search_path = public as $$
+declare v_biz uuid := public.current_business_id(); v_code text; v_cycle text; v_pct numeric; v_valid boolean;
+begin
+  if v_biz is null then return 0; end if;
+  select nullif(upper(trim(referred_by_code)), ''), subscription_cycle
+    into v_code, v_cycle from public.businesses where id = v_biz;
+  if v_code is null then return 0; end if;
+  if v_cycle is not null then return 0; end if;  -- already a paying subscriber → first-payment discount spent
+  select exists (select 1 from public.cs_referrer cr where upper(cr.code) = v_code and cr.active)
+      or exists (select 1 from public.businesses b where upper(b.referral_code) = v_code and b.id <> v_biz)
+    into v_valid;
+  if not v_valid then return 0; end if;
+  select referee_discount_percent into v_pct from public.referral_config limit 1;
+  return coalesce(v_pct, 0);
+end $$;
+revoke all on function public.my_referee_discount() from public, anon;
+grant execute on function public.my_referee_discount() to authenticated;
+
 notify pgrst, 'reload schema';

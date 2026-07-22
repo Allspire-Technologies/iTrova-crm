@@ -24,6 +24,8 @@ Track who refers new businesses, what each referral is worth, and pay it out.
 ### Notes
 - One migration on the shared iTrova project adds the referrer registry, applications, payout ledger,
   and the summary/payout/earnings functions. Apply the iTrova migration first, then this one.
+- Adds `my_referee_discount()` so iTrova can auto-apply a referred business's first-payment discount —
+  it validates the referral code against the registry (or another business's own code) server-side.
 
 ## 2026-07-14 — Fix: deleting a business with sales or ledger data
 
