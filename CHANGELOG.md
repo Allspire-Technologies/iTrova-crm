@@ -3,6 +3,18 @@
 Notable changes to the iTrova CRM (Admin OS). The format follows
 [Keep a Changelog](https://keepachangelog.com/); entries are grouped by ship date, newest first.
 
+## 2026-07-25 — Deleting a business removes its users
+
+### Changed
+- **Admin → Delete business** now also deletes the auth accounts of the business's **owner and staff**
+  (previously they were left as orphaned logins). Their profiles are removed too, so no one is left
+  able to sign in to a deleted business, and the freed emails can register a new business.
+
+### Notes
+- One migration on the shared iTrova project re-declares `admin_delete_business` to collect the
+  business's users (owner + `user_roles` members) before the delete and remove their `auth.users`
+  rows after it. The business/data deletion is unchanged.
+
 ## 2026-07-22 — Referrals module
 
 Track who refers new businesses, what each referral is worth, and pay it out.
