@@ -15,6 +15,29 @@ Notable changes to the iTrova CRM (Admin OS). The format follows
   business's users (owner + `user_roles` members) before the delete and remove their `auth.users`
   rows after it. The business/data deletion is unchanged.
 
+## 2026-07-31 — Marketing: AI social calendar + one-tap sharing
+
+Draft a month of social posts with free AI models, approve them, and share to your
+already-logged-in accounts — no platform APIs, no paid subscriptions.
+
+### Added
+- **Marketing page** — a monthly content calendar (3–4 posts/week: Mon/Wed/Fri + alternating
+  Saturdays, future dates only) with draft → approved → posted tracking.
+- **Generate month** — drafts every open slot using a **free-tier cloud model** of your choice
+  (Google Gemini, Groq/Llama, or OpenRouter free models). Keys are free to create and stored once
+  for the whole team in AI settings (admin-only). Posts rotate pillars: SMB tips, features,
+  referral, offers, stories — Nigerian-market tone, ending with the product link.
+- **Share menu per post** — opens the platform's compose window on the account you're already
+  logged into: X and WhatsApp arrive with the caption prefilled; Facebook/LinkedIn carry the link
+  (caption auto-copied to paste); on mobile, **Share with image** hands the branded card + caption
+  to any app, including Instagram. Every share is recorded on the post.
+- **Branded card images** — each post renders a 1080×1080 iTrova card from its hook line
+  (downloadable, editable in the post dialog).
+
+### Notes
+- One migration: `cs_social_post` + `cs_settings.marketing_ai`. Nothing auto-posts — you always
+  press the platform's own Post button.
+
 ## 2026-07-22 — Referrals module
 
 Track who refers new businesses, what each referral is worth, and pay it out.
