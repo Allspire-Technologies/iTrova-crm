@@ -14,6 +14,7 @@ import Renewals from "@/pages/Renewals";
 import Referrals from "@/pages/Referrals";
 import RenewalDetail from "@/pages/RenewalDetail";
 import Messages from "@/pages/Messages";
+import Marketing from "@/pages/Marketing";
 import Tasks from "@/pages/Tasks";
 import Settings from "@/pages/Settings";
 import NotFound from "@/pages/NotFound";
@@ -45,6 +46,7 @@ export default function App() {
             <Route path="/renewals/:id" element={<RenewalDetail />} />
             <Route path="/messages" element={<Messages />} />
             <Route path="/referrals" element={<Referrals />} />
+            <Route path="/marketing" element={<Marketing />} />
             <Route path="/tasks" element={<Tasks />} />
             <Route path="/settings" element={<Settings />} />
           </Route>

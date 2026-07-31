@@ -11,6 +11,7 @@ import {
   ListChecks,
   Mail,
   Gift,
+  Megaphone,
   Settings,
   LogOut,
   ShieldCheck,
@@ -28,6 +29,7 @@ const nav = [
   { to: "/renewals", label: "Renewals", icon: CalendarClock },
   { to: "/messages", label: "Messages", icon: Mail },
   { to: "/referrals", label: "Referrals", icon: Gift },
+  { to: "/marketing", label: "Marketing", icon: Megaphone },
   { to: "/tasks", label: "Tasks", icon: ListChecks },
   { to: "/settings", label: "Settings", icon: Settings },
 ];
