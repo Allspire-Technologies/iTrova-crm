@@ -68,15 +68,29 @@ export async function getActivePlanChange(businessId: string): Promise<PlanChang
 }
 
 /** Open a plan-change/renewal request for a business (returns the request id). Tier + cycle are
- *  independent (iTrova prices each plan_key per cycle); the pair is validated server-side. */
-export async function requestPlanChange(businessId: string, toTier: string, toCycle: string): Promise<string> {
+ *  independent (iTrova prices each plan_key per cycle); the pair is validated server-side.
+ *  `amount` is what the customer actually pays for this cycle — it becomes a cs_renewal_payment
+ *  row when the change is applied, which is what makes referral earnings a receipt rather than an
+ *  estimate. Omit it to fall back to the catalogue price. */
+export async function requestPlanChange(
+  businessId: string, toTier: string, toCycle: string, amount?: number | null,
+): Promise<string> {
   const { data, error } = await supabase.rpc("admin_request_plan_change", {
     p_business_id: businessId,
     p_to_tier: toTier,
     p_to_cycle: toCycle,
+    p_amount: amount ?? null,
   });
   if (error) throw error;
   return String(data);
+}
+
+/** The referred-business first-payment discount (%) this business still qualifies for, or 0.
+ *  iTrova shows it on the customer's own Billing tab, so the CRM must charge the same thing. */
+export async function getRefereeDiscount(businessId: string): Promise<number> {
+  const { data, error } = await supabase.rpc("cs_referee_discount", { p_business_id: businessId });
+  if (error) throw error;
+  return Number(data) || 0;
 }
 
 /** Approve a request (must be a different admin than the requester) — returns the one-time code. */

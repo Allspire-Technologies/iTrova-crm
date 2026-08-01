@@ -111,7 +111,17 @@ function ReferredTab({ config, seesMoney }: { config: ReferralConfig; seesMoney:
                     </TableCell>
                     <TableCell className="whitespace-nowrap text-muted-foreground">{formatDate(r.signedUpAt)}</TableCell>
                     <TableCell>{r.converted ? <Badge>Paying</Badge> : <Badge variant="secondary">Signed up</Badge>}</TableCell>
-                    {seesMoney && <TableCell className="text-right tabular-nums">{r.converted ? formatMoney(r.totalPaid12m) : "—"}</TableCell>}
+                    {seesMoney && (
+                      <TableCell className="text-right tabular-nums">
+                        {r.converted ? formatMoney(r.totalPaid12m) : "—"}
+                        {/* Say so when the figure comes from the plan's price rather than a logged payment. */}
+                        {r.converted && r.valueSource === "estimated" && (
+                          <span className="block text-[10px] font-normal text-muted-foreground" title="No payment recorded yet — estimated from the plan price">
+                            estimated
+                          </span>
+                        )}
+                      </TableCell>
+                    )}
                     {seesMoney && <TableCell className="text-right tabular-nums font-medium">{!r.converted ? "—" : formatMoney(rw.cash)}{r.referrerKind === "business" && r.converted ? <span className="block text-[10px] font-normal text-muted-foreground">as credit</span> : null}</TableCell>}
                   </TableRow>
                 );

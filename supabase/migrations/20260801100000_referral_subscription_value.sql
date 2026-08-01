@@ -11,35 +11,59 @@
 -- subscription itself, reused by every referral RPC so they can never disagree again.
 
 -- ---------------------------------------------------------------- shared revenue definition
---   converted → on a paid plan (tier set and not 'free')
---   months    → whole months on the plan, at least 1 (so a business activated today counts
---               immediately), capped at 12, and frozen at subscription_renews_at once it lapses
---               so a churned customer stops accruing commission
---   revenue   → the plan's monthly price × those months
-create or replace view public.cs_referral_revenue as
+--   converted   → on a paid plan (tier set and not 'free')
+--   cycle_price → what ONE billing cycle actually costs: the cycle's list price less its standing
+--                 cycle discount (an annual plan is billed once, already discounted — charging the
+--                 monthly price × 12 would credit a referrer for money never collected). Falls back
+--                 to monthly price × cycle length when a plan has no row for that cycle.
+--   cycles      → billing cycles STARTED so far, at least 1 (so a business activated today counts
+--                 immediately), capped at one year's worth, and frozen at subscription_renews_at
+--                 once it lapses so a churned customer stops accruing commission
+--   revenue     → cycles × cycle_price
+--
+-- Deliberately ignores plans.promo_percent: it is time-limited (promo_until), so applying it would
+-- silently rewrite past earnings the day a promo expires. What a business actually paid isn't
+-- recorded anywhere, so this is a faithful estimate from standing prices, not a receipt.
+drop view if exists public.cs_referral_revenue;
+create view public.cs_referral_revenue as
 select
   b.id                                             as business_id,
   b.subscription_tier                              as plan_key,
   x.is_paid                                        as converted,
   case when x.is_paid then coalesce(b.subscription_started_at, b.created_at) end as started_at,
-  case when x.is_paid then m.months else 0 end     as months,
-  case when x.is_paid then round(coalesce(p.price_amount, 0) * m.months) else 0 end as revenue
+  c.cycle_months,
+  case when x.is_paid then cy.cycles else 0 end    as cycles,
+  case when x.is_paid then round(cy.cycles * pr.cycle_price) else 0 end as revenue
 from public.businesses b
 left join public.plans p on p.key = b.subscription_tier
 cross join lateral (
-  select coalesce(b.subscription_tier, 'free') <> 'free' as is_paid
+  select coalesce(b.subscription_tier, 'free') <> 'free'   as is_paid,
+         lower(coalesce(b.subscription_cycle, 'monthly'))  as cyc
 ) x
 cross join lateral (
-  select coalesce(b.subscription_started_at, b.created_at) as start_at,
+  select case x.cyc when 'annual' then 12 when 'biannual' then 6 when 'quarterly' then 3 else 1 end as cycle_months
+) c
+left join public.plan_prices pp on pp.plan_id = p.id and pp.cycle = x.cyc
+cross join lateral (
+  select coalesce(
+    round(pp.price_amount * (1 - coalesce(pp.discount_percent, 0) / 100.0)),  -- what one cycle costs
+    round(coalesce(p.price_amount, 0) * c.cycle_months)                      -- no cycle row: monthly × length
+  ) as cycle_price
+) pr
+cross join lateral (
+  select coalesce(b.subscription_started_at, b.created_at)  as start_at,
          least(now(), coalesce(b.subscription_renews_at, now())) as end_at
 ) w
 cross join lateral (
-  select least(12, greatest(1,
-    ( extract(year  from age(w.end_at, w.start_at)) * 12
-    + extract(month from age(w.end_at, w.start_at))
-    )::int + 1
-  )) as months
-) m;
+  select ( extract(year  from age(w.end_at, w.start_at)) * 12
+         + extract(month from age(w.end_at, w.start_at)) )::int as elapsed_months
+) e
+cross join lateral (
+  select least(
+    ceil(12.0 / c.cycle_months)::int,                          -- one year's worth of cycles
+    greatest(1, (e.elapsed_months / c.cycle_months)::int + 1)   -- cycles started so far
+  ) as cycles
+) cy;
 
 -- Only the SECURITY DEFINER functions below read this; it is not business-scoped on its own.
 revoke all on public.cs_referral_revenue from anon, authenticated;
