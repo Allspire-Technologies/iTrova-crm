@@ -95,7 +95,7 @@ function ReferredTab({ config, seesMoney }: { config: ReferralConfig; seesMoney:
             <TableHeader>
               <TableRow>
                 <TableHead>Business</TableHead><TableHead>Code / referrer</TableHead><TableHead>Signed up</TableHead>
-                <TableHead>Status</TableHead>{seesMoney && <TableHead className="text-right">Paid (12mo)</TableHead>}{seesMoney && <TableHead className="text-right">Reward owed</TableHead>}
+                <TableHead>Status</TableHead>{seesMoney && <TableHead className="text-right">First-year value</TableHead>}{seesMoney && <TableHead className="text-right">Reward owed</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
