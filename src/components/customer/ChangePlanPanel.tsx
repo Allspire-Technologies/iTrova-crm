@@ -9,6 +9,7 @@ import {
   listPlans,
   getActivePlanChange,
   requestPlanChange,
+  getRefereeDiscount,
   approvePlanChange,
   cancelPlanChange,
   executePlanChange,
@@ -70,6 +71,11 @@ export function ChangePlanPanel({
   const [cycle, setCycle] = useState<string>(currentCycle ?? "");
   const [target, setTarget] = useState(currentTier ?? "");
   const [busy, setBusy] = useState(false);
+  // What the customer actually pays. Prefilled from the catalogue but editable, so a promo or a
+  // negotiated rate is recorded as the real figure rather than list price.
+  const [amount, setAmount] = useState<string>("");
+  const [amountTouched, setAmountTouched] = useState(false);
+  const [refereeDiscount, setRefereeDiscount] = useState(0); // 0 unless this business was referred
   const [generatedCode, setGeneratedCode] = useState<string | null>(null);
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
@@ -98,6 +104,14 @@ export function ChangePlanPanel({
     };
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    getRefereeDiscount(businessId)
+      .then((d) => { if (!cancelled) setRefereeDiscount(d); })
+      .catch(() => { /* not fatal — just prices at list */ });
+    return () => { cancelled = true; };
+  }, [businessId, reloadKey]);
+
   // iTrova prices per cycle, so each cycle is its own set of plan rows. Offer the cycles that exist
   // in the catalogue, then the plans within the chosen cycle.
   const cycleOptions = Array.from(new Set(plans.map((p) => p.cycle).filter(Boolean)));
@@ -111,6 +125,19 @@ export function ChangePlanPanel({
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [plans]);
+
+  const selectedPlan = plansForCycle.find((p) => p.planKey === target) ?? null;
+  const listAmount = selectedPlan ? netPrice(selectedPlan) : null;
+  // A referred business is promised "X% off your first payment" in iTrova itself, so the CRM has to
+  // charge the same figure — otherwise the app and the invoice disagree.
+  const catalogueAmount = listAmount == null ? null
+    : refereeDiscount > 0 ? Math.round(listAmount * (1 - refereeDiscount / 100)) : listAmount;
+
+  // Follow the catalogue price as the plan/cycle changes, until the admin types their own figure.
+  useEffect(() => {
+    if (!amountTouched) setAmount(catalogueAmount == null ? "" : String(catalogueAmount));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [catalogueAmount]);
 
   // Keep the selected plan valid for the chosen cycle (prefer the current plan when it's offered).
   useEffect(() => {
@@ -136,7 +163,12 @@ export function ChangePlanPanel({
     if (!target) return;
     setBusy(true);
     try {
-      await requestPlanChange(businessId, target, cycle);
+      const amt = amount.trim() === "" ? null : Number(amount);
+      if (amt != null && (Number.isNaN(amt) || amt < 0)) {
+        toast.error("Enter a valid amount, or clear it to use the catalogue price.");
+        return;
+      }
+      await requestPlanChange(businessId, target, cycle, amt);
       toast.success(`Plan ${isRenewal ? "renewal" : "change"} requested — ask another admin to approve it.`);
       reload();
     } catch (e) {
@@ -225,10 +257,32 @@ export function ChangePlanPanel({
                 </option>
               ))}
             </select>
+            <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              Amount paid
+              <input
+                type="number" min={0} inputMode="decimal"
+                aria-label="Amount the customer actually pays"
+                value={amount}
+                onChange={(e) => { setAmountTouched(true); setAmount(e.target.value); }}
+                className={`${selectClass} w-32`}
+              />
+            </label>
             <Button variant="brand" size="sm" disabled={!target || busy} onClick={onRequest}>
               {isRenewal ? "Request renewal" : "Request change"}
             </Button>
           </div>
+          {refereeDiscount > 0 && (
+            <p className="text-xs text-brand-dark">
+              Referred business — <strong>{refereeDiscount}% off their first payment</strong> is already applied
+              {listAmount != null && <> ({formatMoney(listAmount, currency)} → {formatMoney(catalogueAmount ?? 0, currency)})</>}.
+              This is the price they were shown in iTrova.
+            </p>
+          )}
+          <p className="text-xs text-muted-foreground">
+            <strong>Amount paid</strong> is recorded against the business when the change is applied — it feeds
+            Renewals and referral earnings. It defaults to the catalogue price; change it for a promo or a
+            negotiated rate so what's reported is what was actually collected.
+          </p>
           <p className="text-xs text-muted-foreground">
             Pick the billing cycle then the plan, or keep the current plan to renew (restart the period). A second
             admin must approve before it can be applied.

@@ -45,6 +45,9 @@ export type ReferredBusiness = {
   totalPaid12m: number;
   converted: boolean;
   matched: boolean;
+  /** 'recorded' = summed from real payments; 'estimated' = derived from the subscription's
+   *  standing price, because no payment has been logged for this business yet. */
+  valueSource: "recorded" | "estimated";
 };
 
 export type ReferrerSummary = {
@@ -160,6 +163,7 @@ export async function listReferredBusinesses(search?: string): Promise<ReferredB
     firstPaidAt: r.first_paid_at == null ? null : String(r.first_paid_at),
     totalPaid12m: Number(r.total_paid_12m) || 0,
     converted: Boolean(r.converted), matched: Boolean(r.matched),
+    valueSource: r.value_source === "recorded" ? "recorded" : "estimated",
   }));
 }
 
