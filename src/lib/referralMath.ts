@@ -12,18 +12,20 @@ export type ReferralConfig = {
 
 export type ReferralRow = {
   kind: ReferrerKind | null;
-  effectiveSharePercent: number | null; // for affiliates (config default already applied server-side)
+  effectiveSharePercent: number | null; // config default for the kind already applied server-side
   planKey: string | null;
+  /** First-year SUBSCRIPTION value (plan price × months on the plan, capped at 12), not the
+   *  hand-logged payment total — see the cs_referral_revenue view. Named for its DB column. */
   totalPaid12m: number;
   converted: boolean;
 };
 
 /** What a single referral is worth to its referrer, given the program config.
- *  - affiliate: `affiliate_share% × payments in the first 12 months` (paid as cash)
- *  - business: `business_share% × payments in the first 12 months` (accrues as subscription credit,
+ *  - affiliate: `affiliate_share% × first-year subscription value` (paid as cash)
+ *  - business: `business_share% × first-year subscription value` (accrues as subscription credit,
  *    applied by an admin) — a separate rate from the affiliate share
  *  - staff: a flat per-conversion sales bonus (SPIFF) by the referred plan
- *  Returns 0 until the referral has converted (made a first payment). */
+ *  Returns 0 until the referral has converted (is on a paid plan). Mirrors _referral_reward(). */
 export function rewardFor(row: ReferralRow, config: ReferralConfig): { cash: number } {
   if (!row.converted) return { cash: 0 };
   if (row.kind === "staff") {
