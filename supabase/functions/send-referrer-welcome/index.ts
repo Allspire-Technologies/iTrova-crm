@@ -1,11 +1,14 @@
 // send-referrer-welcome — emails a newly-registered affiliate/staff referrer their code, share
 // link, and what the program entails (built from referral_config). Admin-only. The referrer's
 // details + config are read SERVER-SIDE from the code, so the browser only passes the code.
-// The Sender token + from-identity live here (Edge Function secrets), never the browser.
+// The Resend key + from-identity live here (Edge Function secrets), never the browser.
 //
-// Secrets:  supabase secrets set SENDER_API_KEY=... SENDER_FROM_EMAIL=... SENDER_FROM_NAME="iTrova"
+// Secrets:  RESEND_API_KEY=re_...  EMAIL_FROM_ADDRESS=no-reply@mail.allspire.tech
+//           EMAIL_FROM_NAME="iTrova"  EMAIL_REPLY_TO=<monitored inbox — REQUIRED in spirit here:
+//           the template invites replies, and the from address is a no-reply>
 // Deploy:   supabase functions deploy send-referrer-welcome
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+// Pinned exact version — a floating @2 could silently change behaviour between cold starts.
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -26,10 +29,11 @@ Deno.serve(async (req) => {
     const url = Deno.env.get("SUPABASE_URL")!;
     const anon = Deno.env.get("SUPABASE_ANON_KEY")!;
     const service = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const senderToken = Deno.env.get("SENDER_API_KEY") ?? Deno.env.get("SENDER_API_TOKEN");
-    const fromEmail = Deno.env.get("SENDER_FROM_EMAIL");
-    const fromName = Deno.env.get("SENDER_FROM_NAME") ?? "iTrova";
-    if (!senderToken || !fromEmail) return json({ error: "Email is not configured (missing SENDER_API_KEY / SENDER_FROM_EMAIL)." }, 500);
+    const resendKey = Deno.env.get("RESEND_API_KEY");
+    const fromEmail = Deno.env.get("EMAIL_FROM_ADDRESS");
+    const fromName = Deno.env.get("EMAIL_FROM_NAME") ?? "iTrova";
+    const replyTo = Deno.env.get("EMAIL_REPLY_TO");
+    if (!resendKey || !fromEmail) return json({ error: "Email is not configured (missing RESEND_API_KEY / EMAIL_FROM_ADDRESS)." }, 500);
 
     // Caller must be admin (only admins register referrers).
     const caller = createClient(url, anon, { global: { headers: { Authorization: req.headers.get("Authorization") ?? "" } } });
@@ -59,6 +63,12 @@ Deno.serve(async (req) => {
       : `<li>You earn a bonus for each business you refer that subscribes: Pro ${money(staffBonus.pro ?? 0)}, Business ${money(staffBonus.business ?? 0)}, Enterprise ${money(staffBonus.enterprise ?? 0)}.</li>
          <li>Bonuses are paid once the referred business makes its first payment.</li>`;
 
+    // "Reply to this email" is only promised when a monitored reply-to is configured — the from
+    // address is a no-reply, and inviting replies into a void is worse than not inviting them.
+    const closing = replyTo
+      ? "Share your link on WhatsApp, with your network, or anywhere business owners are. Reply to this email if you have any questions."
+      : "Share your link on WhatsApp, with your network, or anywhere business owners are.";
+
     const html =
       `<p>Hi ${esc(ref.name)},</p>
        <p>You're set up as an iTrova ${isAffiliate ? "affiliate" : "referral partner"}. Here's everything you need to start earning.</p>
@@ -67,16 +77,24 @@ Deno.serve(async (req) => {
        <p>Anyone who signs up through your link (or enters your code) is automatically attributed to you, and they get <strong>${cfg?.referee_discount_percent ?? 20}% off</strong> their first payment.</p>
        <p><strong>How you earn:</strong></p>
        <ul>${terms}</ul>
-       <p>Share your link on WhatsApp, with your network, or anywhere business owners are. Reply to this email if you have any questions.</p>
+       <p>${closing}</p>
        <p>— The iTrova team</p>`;
 
-    const res = await fetch("https://api.sender.net/v2/message/send", {
+    const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
-      headers: { Accept: "application/json", "Content-Type": "application/json", Authorization: `Bearer ${senderToken}` },
-      body: JSON.stringify({ from: { email: fromEmail, name: fromName }, to: { email: ref.email, name: ref.name }, subject: "Welcome to the iTrova referral program", html }),
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${resendKey}` },
+      body: JSON.stringify({
+        from: `${fromName} <${fromEmail}>`,
+        to: [ref.email],
+        subject: "Welcome to the iTrova referral program",
+        html,
+        ...(replyTo ? { reply_to: replyTo } : {}),
+      }),
+      // A stalled provider connection must not hold the invocation until the platform kills it.
+      signal: AbortSignal.timeout(15_000),
     });
     const payload = await res.json().catch(() => ({}));
-    if (!res.ok) return json({ error: payload?.message ?? payload?.error ?? `Sender returned ${res.status}` }, 502);
+    if (!res.ok) return json({ error: payload?.message ?? payload?.error ?? `Resend returned ${res.status}` }, 502);
     return json({ ok: true, to_email: ref.email });
   } catch (e) {
     return json({ error: (e as Error)?.message ?? "Unexpected error." }, 500);

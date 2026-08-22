@@ -1,14 +1,17 @@
 // send-customer-email — the only path that emails a customer. Admin/Support send a one-way
 // transactional email to a business's owner. We verify the caller is admin or support (and, for
 // support, assigned to the business), resolve the recipient SERVER-SIDE (always the owner's
-// account email — the browser never supplies an address), send via Sender.net's transactional
-// API, and log the result to cs_customer_message. The Sender token + from-identity live only
+// account email — the browser never supplies an address), send via Resend's transactional
+// API, and log the result to cs_customer_message. The Resend key + from-identity live only
 // here (Edge Function secrets), never the browser.
 //
-// Secrets:  supabase secrets set SENDER_API_KEY=... SENDER_FROM_EMAIL=... SENDER_FROM_NAME="iTrova"
+// Secrets:  RESEND_API_KEY=re_...  EMAIL_FROM_ADDRESS=no-reply@mail.allspire.tech
+//           EMAIL_FROM_NAME="iTrova"  EMAIL_REPLY_TO=<monitored inbox, optional but recommended —
+//           the from address is a no-reply, so without this, customer replies bounce>
 // Deploy:   supabase functions deploy send-customer-email
 // (verify_jwt stays ON — only signed-in users can call it; we additionally require admin/support.)
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+// Pinned exact version — a floating @2 could silently change behaviour between cold starts.
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -27,12 +30,12 @@ Deno.serve(async (req) => {
     const url = Deno.env.get("SUPABASE_URL")!;
     const anon = Deno.env.get("SUPABASE_ANON_KEY")!;
     const service = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    // The token secret is stored as SENDER_API_KEY in this project (SENDER_API_TOKEN also accepted).
-    const senderToken = Deno.env.get("SENDER_API_KEY") ?? Deno.env.get("SENDER_API_TOKEN");
-    const fromEmail = Deno.env.get("SENDER_FROM_EMAIL");
-    const fromName = Deno.env.get("SENDER_FROM_NAME") ?? "iTrova";
-    if (!senderToken || !fromEmail) {
-      return json({ error: "Email is not configured (missing SENDER_API_KEY / SENDER_FROM_EMAIL)." }, 500);
+    const resendKey = Deno.env.get("RESEND_API_KEY");
+    const fromEmail = Deno.env.get("EMAIL_FROM_ADDRESS");
+    const fromName = Deno.env.get("EMAIL_FROM_NAME") ?? "iTrova";
+    const replyTo = Deno.env.get("EMAIL_REPLY_TO");
+    if (!resendKey || !fromEmail) {
+      return json({ error: "Email is not configured (missing RESEND_API_KEY / EMAIL_FROM_ADDRESS)." }, 500);
     }
 
     // 1) Caller must be admin or support.
@@ -73,7 +76,7 @@ Deno.serve(async (req) => {
     const { data: profile } = await admin.from("profiles").select("owner_name").eq("id", biz.owner_id).maybeSingle();
     const to_name = profile?.owner_name ?? null;
 
-    // 4) Send via Sender.net, then log the outcome (service role bypasses RLS on the log table).
+    // 4) Send via Resend, then log the outcome (service role bypasses RLS on the log table).
     const logRow = {
       business_id,
       to_email,
@@ -86,28 +89,30 @@ Deno.serve(async (req) => {
 
     let providerId: string | null = null;
     try {
-      const res = await fetch("https://api.sender.net/v2/message/send", {
+      const res = await fetch("https://api.resend.com/emails", {
         method: "POST",
         headers: {
-          Accept: "application/json",
           "Content-Type": "application/json",
-          Authorization: `Bearer ${senderToken}`,
+          Authorization: `Bearer ${resendKey}`,
         },
         body: JSON.stringify({
-          from: { email: fromEmail, name: fromName },
-          to: { email: to_email, name: to_name ?? undefined },
+          from: `${fromName} <${fromEmail}>`,
+          to: [to_email],
           subject,
           html,
+          ...(replyTo ? { reply_to: replyTo } : {}),
         }),
+        // A stalled provider connection must not hold the invocation until the platform kills it.
+        signal: AbortSignal.timeout(15_000),
       });
       const payload = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const message = payload?.message ?? payload?.error ?? `Sender returned ${res.status}`;
+        const message = payload?.message ?? payload?.error ?? `Resend returned ${res.status}`;
         const { error: e1 } = await admin.from("cs_customer_message").insert({ ...logRow, status: "failed", error: String(message) });
         if (e1) console.error("cs_customer_message log insert failed (send failed path):", e1.message);
         return json({ error: String(message) }, 502);
       }
-      providerId = payload?.data?.id ?? payload?.id ?? null;
+      providerId = payload?.id ?? null;
     } catch (e) {
       const { error: e2 } = await admin.from("cs_customer_message").insert({ ...logRow, status: "failed", error: (e as Error)?.message ?? "send failed" });
       if (e2) console.error("cs_customer_message log insert failed (provider unreachable path):", e2.message);
