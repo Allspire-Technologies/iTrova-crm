@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { X, Search, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import { formatDate } from "@/lib/format";
 import {
   listTemplates,
   sendCustomerEmail,
+  emailIdempotencyKey,
   renderTemplate,
   richTextIsEmpty,
   type EmailTemplate,
@@ -63,8 +64,13 @@ export function BulkMessageDialog({
   const [pickerResults, setPickerResults] = useState<MessageRecipient[]>([]);
   const [pickerOpen, setPickerOpen] = useState(false);
 
+  // One idempotency base per dialog session; the server namespaces it per business, so a
+  // re-send of the run replays already-delivered recipients instead of emailing them twice.
+  const runIdRef = useRef(crypto.randomUUID());
+
   useEffect(() => {
     if (!open) return;
+    runIdRef.current = crypto.randomUUID();
     setRecipients(initialRecipients ?? []);
     setTemplateKey("");
     setSubject("");
@@ -125,11 +131,14 @@ export function BulkMessageDialog({
     for (const c of recipients) {
       const vars = varsFor(c);
       try {
+        const renderedSubject = renderTemplate(subject, vars).trim();
+        const renderedHtml = renderTemplate(body, vars);
         await sendCustomerEmail({
           businessId: c.businessId,
-          subject: renderTemplate(subject, vars).trim(),
-          html: renderTemplate(body, vars),
+          subject: renderedSubject,
+          html: renderedHtml,
           templateKey: templateKey || null,
+          idempotencyKey: emailIdempotencyKey(runIdRef.current, renderedSubject + renderedHtml),
         });
         sent++;
       } catch {

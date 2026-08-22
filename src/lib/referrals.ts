@@ -117,9 +117,13 @@ export async function saveReferrer(r: Referrer, isNew: boolean): Promise<void> {
 }
 
 /** Email a referrer their code, share link and program terms (via the send-referrer-welcome
- *  Edge Function, which holds the Sender.net token and reads the config server-side). */
-export async function sendReferrerWelcome(code: string): Promise<void> {
-  const { data, error } = await supabase.functions.invoke<{ ok?: boolean; error?: string }>("send-referrer-welcome", { body: { code } });
+ *  Edge Function, which holds the Resend key and reads the config server-side). Pass the same
+ *  idempotencyKey when retrying a failed send so the provider replays instead of double-sending. */
+export async function sendReferrerWelcome(code: string, idempotencyKey?: string): Promise<void> {
+  const { data, error } = await supabase.functions.invoke<{ ok?: boolean; error?: string }>(
+    "send-referrer-welcome",
+    { body: { code, idempotency_key: idempotencyKey ?? null } },
+  );
   if (error) {
     if ((error as { name?: string }).name === "FunctionsFetchError") throw new Error("Couldn't reach the email function — deploy it: supabase functions deploy send-referrer-welcome");
     let message = error.message;

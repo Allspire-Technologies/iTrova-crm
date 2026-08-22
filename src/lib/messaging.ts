@@ -176,7 +176,20 @@ export type SendEmailInput = {
   subject: string;
   html: string;
   templateKey?: string | null;
+  /** Retry-safe send key (see emailIdempotencyKey). Same key = Resend replays instead of
+   *  double-sending, which matters when a timeout fires after the provider accepted the email. */
+  idempotencyKey?: string;
 };
+
+/** Idempotency key for one email attempt-series: keep `base` (a UUID minted when composing starts)
+ *  until the send SUCCEEDS, so a retry after a timeout replays rather than double-sends. The
+ *  content hash is folded in because Resend rejects a reused key whose payload changed — editing
+ *  the message after a failure must produce a fresh key, not a 409. */
+export function emailIdempotencyKey(base: string, content: string): string {
+  let h = 5381;
+  for (let i = 0; i < content.length; i++) h = ((h << 5) + h + content.charCodeAt(i)) >>> 0;
+  return `${base}-${h.toString(16)}`;
+}
 
 /** Send a customer email via the Edge Function. The recipient is resolved SERVER-SIDE (always the
  *  business owner's account email) — the browser never chooses the address. Returns the resolved
@@ -190,6 +203,7 @@ export async function sendCustomerEmail(input: SendEmailInput): Promise<string> 
         subject: input.subject,
         html: input.html,
         template_key: input.templateKey ?? null,
+        idempotency_key: input.idempotencyKey ?? null,
       },
     },
   );

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { PageHeader } from "@/components/PageHeader";
 import { LoadingState } from "@/components/states/LoadingState";
@@ -244,6 +244,9 @@ function ReferrerForm({ state, config, onClose, onSaved, onToggle }: {
   const [r, setR] = useState<Referrer>(state.r);
   const [emailThem, setEmailThem] = useState(true); // email the referrer their details on add
   const [busy, setBusy] = useState(false);
+  // Survives a failed welcome-email attempt so re-saving retries with the SAME idempotency key —
+  // the provider replays instead of emailing the referrer twice.
+  const welcomeKeyRef = useRef(crypto.randomUUID());
   const set = (p: Partial<Referrer>) => setR((x) => ({ ...x, ...p }));
 
   const save = async () => {
@@ -254,7 +257,7 @@ function ReferrerForm({ state, config, onClose, onSaved, onToggle }: {
       await saveReferrer(r, state.isNew);
       // On add, optionally email the referrer their code + what the program entails.
       if (state.isNew && emailThem && r.email?.trim()) {
-        try { await sendReferrerWelcome(r.code.trim().toUpperCase()); toast.success(`Saved — details emailed to ${r.email}`); }
+        try { await sendReferrerWelcome(r.code.trim().toUpperCase(), welcomeKeyRef.current); toast.success(`Saved — details emailed to ${r.email}`); }
         catch (e) { toast.warning(`Saved, but the email didn't send: ${msg(e)}`); }
       } else {
         toast.success("Saved");
@@ -322,6 +325,9 @@ function ApplicationsTab({ isAdmin, onChange }: { isAdmin: boolean; onChange: ()
   const [rows, setRows] = useState<ReferrerApplication[] | null>(null);
   const load = () => listApplications().then(setRows).catch((e) => toast.error(msg(e)));
   useEffect(() => { load(); }, []);
+  // Per-application welcome-email keys: approving again after a failed email retries with the
+  // same key, so the provider replays instead of double-sending.
+  const welcomeKeysRef = useRef<Record<string, string>>({});
 
   const approve = async (a: ReferrerApplication) => {
     try {
@@ -329,7 +335,9 @@ function ApplicationsTab({ isAdmin, onChange }: { isAdmin: boolean; onChange: ()
       const code = suggestCode(a.name, a.phone);
       await saveReferrer({ code, name: a.name, kind: "affiliate", phone: a.phone, email: a.email, bankName: null, accountNumber: null, accountName: null, sharePercent: null, active: true, notes: "From website application" }, true);
       await setApplicationStatus(a.id, "approved");
-      try { if (a.email) await sendReferrerWelcome(code); } catch (e) { toast.warning(`Affiliate created, but the email didn't send: ${msg(e)}`); }
+      try {
+        if (a.email) await sendReferrerWelcome(code, (welcomeKeysRef.current[a.id] ??= crypto.randomUUID()));
+      } catch (e) { toast.warning(`Affiliate created, but the email didn't send: ${msg(e)}`); }
       toast.success(`Approved — ${a.name} added as an affiliate (${code})`);
       load(); onChange();
     } catch (e) { toast.error(msg(e)); }
