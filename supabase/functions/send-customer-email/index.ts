@@ -48,10 +48,20 @@ Deno.serve(async (req) => {
       return json({ error: "Only Management/Admin or Support can email customers." }, 403);
     }
 
-    const { business_id, subject, html, template_key } = await req.json().catch(() => ({}));
+    const { business_id, subject, html, template_key, idempotency_key } = await req.json().catch(() => ({}));
     if (!business_id || typeof business_id !== "string") return json({ error: "A business id is required." }, 400);
     if (!subject || typeof subject !== "string") return json({ error: "A subject is required." }, 400);
     if (!html || typeof html !== "string") return json({ error: "A message body is required." }, 400);
+
+    // Retry-safe sends: our own 15s deadline can fire AFTER Resend accepted the email, so we'd log
+    // "failed", the admin would retry, and the customer would get it twice. The compose UI mints a
+    // key when a send starts and reuses it until the send succeeds; Resend replays a known key
+    // instead of sending again. Namespaced with the business id so one key can't collide across
+    // recipients. A malformed/absent key falls back to a fresh UUID — always sent, no replay guard.
+    const clientKey = typeof idempotency_key === "string" && /^[A-Za-z0-9-]{8,64}$/.test(idempotency_key)
+      ? idempotency_key
+      : crypto.randomUUID();
+    const idempotencyKey = `cs-${business_id}-${clientKey}`;
 
     // 2) Support may only message businesses assigned to them.
     if (role !== "admin") {
@@ -94,6 +104,7 @@ Deno.serve(async (req) => {
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${resendKey}`,
+          "Idempotency-Key": idempotencyKey,
         },
         body: JSON.stringify({
           from: `${fromName} <${fromEmail}>`,
@@ -112,7 +123,15 @@ Deno.serve(async (req) => {
         if (e1) console.error("cs_customer_message log insert failed (send failed path):", e1.message);
         return json({ error: String(message) }, 502);
       }
-      providerId = payload?.id ?? null;
+      // A 2xx without a message id is not a confirmed send — log it as failed rather than
+      // recording "sent" with nothing to trace it by. The idempotency key makes the retry safe.
+      if (typeof payload?.id !== "string" || payload.id === "") {
+        const message = "Resend accepted the request but returned no message id — delivery unconfirmed, retry is safe.";
+        const { error: e3 } = await admin.from("cs_customer_message").insert({ ...logRow, status: "failed", error: message });
+        if (e3) console.error("cs_customer_message log insert failed (no-id path):", e3.message);
+        return json({ error: message }, 502);
+      }
+      providerId = payload.id;
     } catch (e) {
       const { error: e2 } = await admin.from("cs_customer_message").insert({ ...logRow, status: "failed", error: (e as Error)?.message ?? "send failed" });
       if (e2) console.error("cs_customer_message log insert failed (provider unreachable path):", e2.message);

@@ -41,8 +41,15 @@ Deno.serve(async (req) => {
     if (roleErr) return json({ error: roleErr.message }, 401);
     if (role !== "admin") return json({ error: "Only Management/Admin can send referrer invites." }, 403);
 
-    const { code } = await req.json().catch(() => ({}));
+    const { code, idempotency_key } = await req.json().catch(() => ({}));
     if (!code || typeof code !== "string") return json({ error: "A referrer code is required." }, 400);
+
+    // Retry-safe: same scheme as send-customer-email — the UI holds a key per attempt-series, and
+    // Resend replays a known key instead of double-sending after a timeout-then-retry.
+    const clientKey = typeof idempotency_key === "string" && /^[A-Za-z0-9-]{8,64}$/.test(idempotency_key)
+      ? idempotency_key
+      : crypto.randomUUID();
+    const idempotencyKey = `ref-${code.toUpperCase().replace(/[^A-Z0-9]/g, "")}-${clientKey}`;
 
     // Load the referrer + program config server-side.
     const admin = createClient(url, service);
@@ -82,7 +89,7 @@ Deno.serve(async (req) => {
 
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${resendKey}` },
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${resendKey}`, "Idempotency-Key": idempotencyKey },
       body: JSON.stringify({
         from: `${fromName} <${fromEmail}>`,
         to: [ref.email],
@@ -95,6 +102,10 @@ Deno.serve(async (req) => {
     });
     const payload = await res.json().catch(() => ({}));
     if (!res.ok) return json({ error: payload?.message ?? payload?.error ?? `Resend returned ${res.status}` }, 502);
+    // A 2xx without a message id is not a confirmed send; the idempotency key makes retrying safe.
+    if (typeof payload?.id !== "string" || payload.id === "") {
+      return json({ error: "Resend accepted the request but returned no message id — delivery unconfirmed, retry is safe." }, 502);
+    }
     return json({ ok: true, to_email: ref.email });
   } catch (e) {
     return json({ error: (e as Error)?.message ?? "Unexpected error." }, 500);

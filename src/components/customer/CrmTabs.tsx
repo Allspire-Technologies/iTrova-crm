@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,6 +29,7 @@ import {
   listTemplates,
   listCustomerMessages,
   sendCustomerEmail,
+  emailIdempotencyKey,
   logWhatsapp,
   renderTemplate,
   richTextIsEmpty,
@@ -472,6 +473,8 @@ function MessagesTab({ customer }: { customer: MessageCustomer }) {
   const [body, setBody] = useState("");           // email: rich-text HTML
   const [waText, setWaText] = useState("");        // whatsapp: plain text
   const [sending, setSending] = useState(false);
+  // Idempotency base for the email being composed — lives until a send succeeds (see sendEmail).
+  const sendKeyRef = useRef<string | null>(null);
 
   const vars: MergeVars = {
     business_name: customer.name,
@@ -503,7 +506,14 @@ function MessagesTab({ customer }: { customer: MessageCustomer }) {
     if (!customer.ownerEmail || !subject.trim() || richTextIsEmpty(body)) return;
     setSending(true);
     try {
-      const sentTo = await sendCustomerEmail({ businessId: customer.id, subject: subject.trim(), html: body, templateKey: templateKey || null });
+      // The key base survives a failed attempt so retrying the SAME message replays at the
+      // provider instead of emailing the customer twice; it renews once a send succeeds.
+      sendKeyRef.current ??= crypto.randomUUID();
+      const sentTo = await sendCustomerEmail({
+        businessId: customer.id, subject: subject.trim(), html: body, templateKey: templateKey || null,
+        idempotencyKey: emailIdempotencyKey(sendKeyRef.current, subject.trim() + body),
+      });
+      sendKeyRef.current = null;
       toast.success(`Email sent to ${sentTo || customer.ownerEmail}.`);
       setSubject(""); setBody(""); setTemplateKey("");
       listCustomerMessages(customer.id).then(setHistory).catch(() => {});
