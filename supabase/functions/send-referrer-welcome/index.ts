@@ -59,20 +59,26 @@ Deno.serve(async (req) => {
     const stamp = async (kind: "welcome" | "decline", error: string | null) => {
       if (!appId) return;
       try {
-        await admin.from("cs_referrer_application")
+        const { error: stampErr } = await admin.from("cs_referrer_application")
           .update({ notified_at: error ? null : new Date().toISOString(), notified_kind: kind, notify_error: error })
           .eq("id", appId);
-      } catch { /* stamping is advisory */ }
+        if (stampErr) console.error("send-referrer-welcome: outcome stamp failed", stampErr.message);
+      } catch (e) { console.error("send-referrer-welcome: outcome stamp threw", (e as Error)?.message); }
     };
 
     const deliver = async (to: string, subject: string, html: string, idempotencyKey: string): Promise<string | null> => {
-      const res = await fetch("https://api.resend.com/emails", {
+      let res: Response;
+      try {
+        res = await fetch("https://api.resend.com/emails", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${resendKey}`, "Idempotency-Key": idempotencyKey },
         body: JSON.stringify({ from: `${fromName} <${fromEmail}>`, to: [to], subject, html, ...(replyTo ? { reply_to: replyTo } : {}) }),
         // A stalled provider connection must not hold the invocation until the platform kills it.
         signal: AbortSignal.timeout(15_000),
-      });
+        });
+      } catch (e) {
+        return (e as Error)?.name === "TimeoutError" ? "Email provider timed out (15s)." : `Couldn't reach the email provider: ${(e as Error)?.message ?? "network error"}`;
+      }
       const payload = await res.json().catch(() => ({}));
       if (!res.ok) return payload?.message ?? payload?.error ?? `Resend returned ${res.status}`;
       // A 2xx without a message id is not a confirmed send; the idempotency key makes retrying safe.
@@ -95,7 +101,7 @@ Deno.serve(async (req) => {
          <p>Thank you for applying to the iTrova affiliate program. After reviewing your application, we are not able to bring you on board at this time.</p>
          <p>${closingDecline}</p>
          <p>The iTrova team</p>`;
-      const err = await deliver(app.email, "Your iTrova affiliate application", declineHtml, `app-${appId}-${clientKey}`);
+      const err = await deliver(app.email, "Your iTrova affiliate application", declineHtml, `app-${appId}-decline`);
       await stamp("decline", err);
       if (err) return json({ error: err }, 502);
       return json({ ok: true, to_email: app.email });
@@ -103,7 +109,11 @@ Deno.serve(async (req) => {
 
     // ---- Welcome path: a registered referrer ----
     if (!code || typeof code !== "string") return json({ error: "A referrer code is required." }, 400);
-    const idempotencyKey = `ref-${code.toUpperCase().replace(/[^A-Z0-9]/g, "")}-${clientKey}`;
+    // Application-backed welcomes get a deterministic key (durable across remounts/devices);
+    // registry-form welcomes keep the client's per-attempt-series key.
+    const idempotencyKey = appId
+      ? `app-${appId}-welcome`
+      : `ref-${code.toUpperCase().replace(/[^A-Z0-9]/g, "")}-${clientKey}`;
 
     // Load the referrer + program config server-side.
     const { data: ref, error: refErr } = await admin.from("cs_referrer").select("*").eq("code", code.toUpperCase()).maybeSingle();

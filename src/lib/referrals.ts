@@ -129,9 +129,11 @@ export async function sendReferrerWelcome(code: string, idempotencyKey?: string,
   await invokeReferralEmail({ code, idempotency_key: idempotencyKey ?? null, application_id: applicationId ?? null });
 }
 
-/** Email a rejected applicant a polite decline (same function, decision path). */
-export async function sendApplicationDecline(applicationId: string, idempotencyKey?: string): Promise<void> {
-  await invokeReferralEmail({ decision: "rejected", application_id: applicationId, idempotency_key: idempotencyKey ?? null });
+/** Email a rejected applicant a polite decline (same function, decision path). The function
+ *  derives a deterministic idempotency key from the application id, so retries from any device
+ *  replay instead of double-sending. */
+export async function sendApplicationDecline(applicationId: string): Promise<void> {
+  await invokeReferralEmail({ decision: "rejected", application_id: applicationId });
 }
 
 async function invokeReferralEmail(body: Record<string, unknown>): Promise<void> {
@@ -162,12 +164,11 @@ export async function referrerHistory(code: string): Promise<{ referred: number;
   };
 }
 
+/** Atomic check + delete in one transaction under a per-code lock (cs_delete_referrer RPC);
+ *  raises with the counts when the affiliate has history. referrerHistory() stays for the
+ *  friendlier pre-check message in the UI. */
 export async function deleteReferrer(code: string): Promise<void> {
-  const h = await referrerHistory(code);
-  if (h.referred > 0 || h.paid > 0 || h.accrued > 0) {
-    throw new Error(`${code} has history (${h.referred} referred, paid ${h.paid}, accrued ${h.accrued}). Deactivate it instead so attribution and payouts stay intact.`);
-  }
-  const { error } = await sb.from("cs_referrer").delete().eq("code", code);
+  const { error } = await sb.rpc("cs_delete_referrer", { p_code: code });
   if (error) throw error;
 }
 

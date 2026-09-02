@@ -6,6 +6,7 @@ Notable changes to the iTrova CRM (Admin OS). The format follows
 ## 2026-09-02 — Affiliate applications: outcome emails, delivery status, delete
 
 ### Added
+
 - **Reject emails the applicant** a polite decline (approve already emailed the welcome). Both
   actions now ask for confirmation first, since they email and can't be undone.
 - **Email column on Applications** shows whether the outcome email was delivered ("Welcome sent",
@@ -16,6 +17,7 @@ Notable changes to the iTrova CRM (Admin OS). The format follows
   to Deactivate so attribution and payout records stay intact.
 
 ### Notes
+
 - One migration (`20260902120000`) adds `notified_at` / `notified_kind` / `notify_error` to
   `cs_referrer_application` (plus the service_role grant); re-deploy `send-referrer-welcome`, which
   gains the decline path and stamps the outcome. The website's affiliate form now requires an email.

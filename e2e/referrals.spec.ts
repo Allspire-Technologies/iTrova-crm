@@ -69,7 +69,9 @@ test.describe("Referrals module", () => {
     await expect(page.getByText("Tunde Bello")).toBeVisible();
     const insert = page.waitForRequest((r) => r.url().includes("/rest/v1/cs_referrer") && !r.url().includes("application") && r.method() === "POST");
     const patch = page.waitForRequest((r) => r.url().includes("/rest/v1/cs_referrer_application") && r.method() === "PATCH");
-    await page.getByRole("button", { name: "Approve" }).click();
+    await page.getByRole("button", { name: "Approve", exact: true }).click();
+    // Approve confirms first (it emails the applicant and can't be undone).
+    await page.getByRole("button", { name: "Approve and email" }).click();
     const req = await insert; await patch;
     // Created as an affiliate with the code suggested from the applicant's name + last-4 phone.
     expect(req.postData() ?? "").toContain('"kind":"affiliate"');

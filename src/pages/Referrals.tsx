@@ -364,9 +364,6 @@ function ApplicationsTab({ isAdmin, onChange }: { isAdmin: boolean; onChange: ()
   const [rows, setRows] = useState<ReferrerApplication[] | null>(null);
   const load = () => listApplications().then(setRows).catch((e) => toast.error(msg(e)));
   useEffect(() => { load(); }, []);
-  // Per-application welcome-email keys: approving again after a failed email retries with the
-  // same key, so the provider replays instead of double-sending.
-  const welcomeKeysRef = useRef<Record<string, string>>({});
   // Approve/Reject go through a confirmation: both email the applicant and can't be undone.
   const [decision, setDecision] = useState<{ a: ReferrerApplication; kind: "approve" | "reject" } | null>(null);
   const [deciding, setDeciding] = useState(false);
@@ -389,7 +386,7 @@ function ApplicationsTab({ isAdmin, onChange }: { isAdmin: boolean; onChange: ()
       await saveReferrer({ code, name: a.name, kind: "affiliate", phone: a.phone, email: a.email, bankName: null, accountNumber: null, accountName: null, sharePercent: null, active: true, notes: "From website application" }, true);
       await setApplicationStatus(a.id, "approved");
       try {
-        if (a.email) await sendReferrerWelcome(code, (welcomeKeysRef.current[a.id] ??= crypto.randomUUID()), a.id);
+        if (a.email) await sendReferrerWelcome(code, undefined, a.id);
         else toast.warning("Approved, but this application has no email, so no welcome was sent.");
       } catch (e) { toast.warning(`Affiliate created, but the email didn't send: ${msg(e)}`); }
       toast.success(`Approved — ${a.name} added as an affiliate (${code})`);
@@ -400,19 +397,19 @@ function ApplicationsTab({ isAdmin, onChange }: { isAdmin: boolean; onChange: ()
     try {
       await setApplicationStatus(a.id, "rejected");
       try {
-        if (a.email) await sendApplicationDecline(a.id, (welcomeKeysRef.current[a.id] ??= crypto.randomUUID()));
+        if (a.email) await sendApplicationDecline(a.id);
         else toast.warning("Rejected, but this application has no email, so no decline was sent.");
       } catch (e) { toast.warning(`Rejected, but the email didn't send: ${msg(e)}`); }
       toast.success("Rejected"); load(); onChange();
     } catch (e) { toast.error(msg(e)); }
   };
-  // Re-attempt the outcome email for an already-decided application (same idempotency key per
-  // application, so a provider that already delivered replays instead of double-sending).
+  // Re-attempt the outcome email for an already-decided application. The function derives the
+  // idempotency key from the application id, so a provider that already delivered replays
+  // instead of double-sending, even after a remount or from another device.
   const resend = async (a: ReferrerApplication) => {
     try {
-      const key = (welcomeKeysRef.current[a.id] ??= crypto.randomUUID());
-      if (a.status === "approved") await sendReferrerWelcome(suggestCode(a.name, a.phone), key, a.id);
-      else await sendApplicationDecline(a.id, key);
+      if (a.status === "approved") await sendReferrerWelcome(suggestCode(a.name, a.phone), undefined, a.id);
+      else await sendApplicationDecline(a.id);
       toast.success(`Email sent to ${a.email}`); load();
     } catch (e) { toast.error(`Email didn't send: ${msg(e)}`); load(); }
   };
