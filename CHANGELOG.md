@@ -10,7 +10,13 @@ Notable changes to the iTrova CRM (Admin OS). The format follows
   blog posts (markdown, cover-image upload), testimonials and page-copy overrides, each with a
   draft/published toggle. Only published rows are visible to the public site; publishing needs
   the admin role. Blog covers upload to the new `cms-media` storage bucket (5 MB, images only).
-- Guide-section editing is a planned follow-up; the site keeps its built-in guide until then.
+- **Guide tab** — edit the site's user guide section by section: numbered steps with optional
+  notes (reorder or remove), screenshots with upload and required alt text, role visibility, and
+  a slug picker of the 18 built-in sections. Matching a built-in slug overrides that section on
+  the site; a new slug adds one; deleting an override restores the built-in copy.
+
+### Fixed
+- Typing in the blog editor no longer snaps the caret back to the Title field.
 
 ## 2026-07-25 — Deleting a business removes its users
 
