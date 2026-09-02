@@ -3,6 +3,23 @@
 Notable changes to the iTrova CRM (Admin OS). The format follows
 [Keep a Changelog](https://keepachangelog.com/); entries are grouped by ship date, newest first.
 
+## 2026-09-02 — Affiliate applications: outcome emails, delivery status, delete
+
+### Added
+- **Reject emails the applicant** a polite decline (approve already emailed the welcome). Both
+  actions now ask for confirmation first, since they email and can't be undone.
+- **Email column on Applications** shows whether the outcome email was delivered ("Welcome sent",
+  "Decline sent", "Failed: reason", or "No email on file"), with a **Send email** retry that reuses
+  the same idempotency key so a provider that already delivered replays instead of double-sending.
+- **Delete affiliate** (Referrers → edit): allowed only when the affiliate has no referred businesses
+  and no payouts, behind a type-the-code confirmation. With history, the button explains and points
+  to Deactivate so attribution and payout records stay intact.
+
+### Notes
+- One migration (`20260902120000`) adds `notified_at` / `notified_kind` / `notify_error` to
+  `cs_referrer_application` (plus the service_role grant); re-deploy `send-referrer-welcome`, which
+  gains the decline path and stamps the outcome. The website's affiliate form now requires an email.
+
 ## 2026-09-02 — Website content console
 
 ### Added
