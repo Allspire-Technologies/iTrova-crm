@@ -1,5 +1,8 @@
 // send-referrer-welcome — emails a newly-registered affiliate/staff referrer their code, share
-// link, and what the program entails (built from referral_config). Admin-only. The referrer's
+// link, and what the program entails (built from referral_config). Also sends the polite decline
+// for a rejected website application (decision: "rejected" + application_id). When an
+// application_id is passed, the outcome is stamped on cs_referrer_application (notified_at /
+// notified_kind / notify_error) so the CRM shows delivery state. Admin-only. The referrer's
 // details + config are read SERVER-SIDE from the code, so the browser only passes the code.
 // The Resend key + from-identity live here (Edge Function secrets), never the browser.
 //
@@ -41,22 +44,82 @@ Deno.serve(async (req) => {
     if (roleErr) return json({ error: roleErr.message }, 401);
     if (role !== "admin") return json({ error: "Only Management/Admin can send referrer invites." }, 403);
 
-    const { code, idempotency_key } = await req.json().catch(() => ({}));
-    if (!code || typeof code !== "string") return json({ error: "A referrer code is required." }, 400);
+    const { code, idempotency_key, application_id, decision } = await req.json().catch(() => ({}));
+    const appId = typeof application_id === "string" && application_id ? application_id : null;
 
     // Retry-safe: same scheme as send-customer-email — the UI holds a key per attempt-series, and
     // Resend replays a known key instead of double-sending after a timeout-then-retry.
     const clientKey = typeof idempotency_key === "string" && /^[A-Za-z0-9-]{8,64}$/.test(idempotency_key)
       ? idempotency_key
       : crypto.randomUUID();
-    const idempotencyKey = `ref-${code.toUpperCase().replace(/[^A-Z0-9]/g, "")}-${clientKey}`;
+
+    const admin = createClient(url, service);
+
+    // Best-effort outcome stamp on the application; never masks the send result.
+    const stamp = async (kind: "welcome" | "decline", error: string | null) => {
+      if (!appId) return;
+      try {
+        const { error: stampErr } = await admin.from("cs_referrer_application")
+          .update({ notified_at: error ? null : new Date().toISOString(), notified_kind: kind, notify_error: error })
+          .eq("id", appId);
+        if (stampErr) console.error("send-referrer-welcome: outcome stamp failed", stampErr.message);
+      } catch (e) { console.error("send-referrer-welcome: outcome stamp threw", (e as Error)?.message); }
+    };
+
+    const deliver = async (to: string, subject: string, html: string, idempotencyKey: string): Promise<string | null> => {
+      let res: Response;
+      try {
+        res = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${resendKey}`, "Idempotency-Key": idempotencyKey },
+        body: JSON.stringify({ from: `${fromName} <${fromEmail}>`, to: [to], subject, html, ...(replyTo ? { reply_to: replyTo } : {}) }),
+        // A stalled provider connection must not hold the invocation until the platform kills it.
+        signal: AbortSignal.timeout(15_000),
+        });
+      } catch (e) {
+        return (e as Error)?.name === "TimeoutError" ? "Email provider timed out (15s)." : `Couldn't reach the email provider: ${(e as Error)?.message ?? "network error"}`;
+      }
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) return payload?.message ?? payload?.error ?? `Resend returned ${res.status}`;
+      // A 2xx without a message id is not a confirmed send; the idempotency key makes retrying safe.
+      if (typeof payload?.id !== "string" || payload.id === "") return "Resend accepted the request but returned no message id. Delivery unconfirmed, retry is safe.";
+      return null;
+    };
+
+    // ---- Decline path: a rejected website application ----
+    if (decision === "rejected") {
+      if (!appId) return json({ error: "An application id is required." }, 400);
+      const { data: app, error: appErr } = await admin.from("cs_referrer_application").select("id, name, email").eq("id", appId).maybeSingle();
+      if (appErr) return json({ error: appErr.message }, 500);
+      if (!app) return json({ error: "Application not found." }, 404);
+      if (!app.email) { await stamp("decline", "No email on file"); return json({ error: "This applicant has no email on file." }, 422); }
+      const closingDecline = replyTo
+        ? "If you think we have missed something, or your situation changes, reply to this email and we will take another look."
+        : "If your situation changes, you are welcome to apply again later.";
+      const declineHtml =
+        `<p>Hi ${esc(app.name)},</p>
+         <p>Thank you for applying to the iTrova affiliate program. After reviewing your application, we are not able to bring you on board at this time.</p>
+         <p>${closingDecline}</p>
+         <p>The iTrova team</p>`;
+      const err = await deliver(app.email, "Your iTrova affiliate application", declineHtml, `app-${appId}-decline`);
+      await stamp("decline", err);
+      if (err) return json({ error: err }, 502);
+      return json({ ok: true, to_email: app.email });
+    }
+
+    // ---- Welcome path: a registered referrer ----
+    if (!code || typeof code !== "string") return json({ error: "A referrer code is required." }, 400);
+    // Application-backed welcomes get a deterministic key (durable across remounts/devices);
+    // registry-form welcomes keep the client's per-attempt-series key.
+    const idempotencyKey = appId
+      ? `app-${appId}-welcome`
+      : `ref-${code.toUpperCase().replace(/[^A-Z0-9]/g, "")}-${clientKey}`;
 
     // Load the referrer + program config server-side.
-    const admin = createClient(url, service);
     const { data: ref, error: refErr } = await admin.from("cs_referrer").select("*").eq("code", code.toUpperCase()).maybeSingle();
     if (refErr) return json({ error: refErr.message }, 500);
     if (!ref) return json({ error: "Referrer not found." }, 404);
-    if (!ref.email) return json({ error: "This referrer has no email on file." }, 422);
+    if (!ref.email) { await stamp("welcome", "No email on file"); return json({ error: "This referrer has no email on file." }, 422); }
     const { data: cfg } = await admin.from("referral_config").select("*").maybeSingle();
 
     const share = ref.share_percent ?? cfg?.affiliate_share_percent ?? 25;
@@ -85,27 +148,11 @@ Deno.serve(async (req) => {
        <p><strong>How you earn:</strong></p>
        <ul>${terms}</ul>
        <p>${closing}</p>
-       <p>— The iTrova team</p>`;
+       <p>The iTrova team</p>`;
 
-    const res = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${resendKey}`, "Idempotency-Key": idempotencyKey },
-      body: JSON.stringify({
-        from: `${fromName} <${fromEmail}>`,
-        to: [ref.email],
-        subject: "Welcome to the iTrova referral program",
-        html,
-        ...(replyTo ? { reply_to: replyTo } : {}),
-      }),
-      // A stalled provider connection must not hold the invocation until the platform kills it.
-      signal: AbortSignal.timeout(15_000),
-    });
-    const payload = await res.json().catch(() => ({}));
-    if (!res.ok) return json({ error: payload?.message ?? payload?.error ?? `Resend returned ${res.status}` }, 502);
-    // A 2xx without a message id is not a confirmed send; the idempotency key makes retrying safe.
-    if (typeof payload?.id !== "string" || payload.id === "") {
-      return json({ error: "Resend accepted the request but returned no message id — delivery unconfirmed, retry is safe." }, 502);
-    }
+    const err = await deliver(ref.email, "Welcome to the iTrova referral program", html, idempotencyKey);
+    await stamp("welcome", err);
+    if (err) return json({ error: err }, 502);
     return json({ ok: true, to_email: ref.email });
   } catch (e) {
     return json({ error: (e as Error)?.message ?? "Unexpected error." }, 500);

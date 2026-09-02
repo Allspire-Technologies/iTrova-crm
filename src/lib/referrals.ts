@@ -30,6 +30,10 @@ export type ReferrerApplication = {
   howPromote: string | null;
   status: "pending" | "approved" | "rejected";
   createdAt: string;
+  /** Outcome-email delivery state, stamped by the send-referrer-welcome function. */
+  notifiedAt: string | null;
+  notifiedKind: "welcome" | "decline" | null;
+  notifyError: string | null;
 };
 
 export type ReferredBusiness = {
@@ -118,11 +122,24 @@ export async function saveReferrer(r: Referrer, isNew: boolean): Promise<void> {
 
 /** Email a referrer their code, share link and program terms (via the send-referrer-welcome
  *  Edge Function, which holds the Resend key and reads the config server-side). Pass the same
- *  idempotencyKey when retrying a failed send so the provider replays instead of double-sending. */
-export async function sendReferrerWelcome(code: string, idempotencyKey?: string): Promise<void> {
+ *  idempotencyKey when retrying a failed send so the provider replays instead of double-sending.
+ *  Pass applicationId when the referrer came from a website application so the delivery outcome
+ *  is stamped on that application. */
+export async function sendReferrerWelcome(code: string, idempotencyKey?: string, applicationId?: string): Promise<void> {
+  await invokeReferralEmail({ code, idempotency_key: idempotencyKey ?? null, application_id: applicationId ?? null });
+}
+
+/** Email a rejected applicant a polite decline (same function, decision path). The function
+ *  derives a deterministic idempotency key from the application id, so retries from any device
+ *  replay instead of double-sending. */
+export async function sendApplicationDecline(applicationId: string): Promise<void> {
+  await invokeReferralEmail({ decision: "rejected", application_id: applicationId });
+}
+
+async function invokeReferralEmail(body: Record<string, unknown>): Promise<void> {
   const { data, error } = await supabase.functions.invoke<{ ok?: boolean; error?: string }>(
     "send-referrer-welcome",
-    { body: { code, idempotency_key: idempotencyKey ?? null } },
+    { body },
   );
   if (error) {
     if ((error as { name?: string }).name === "FunctionsFetchError") throw new Error("Couldn't reach the email function — deploy it: supabase functions deploy send-referrer-welcome");
@@ -131,6 +148,28 @@ export async function sendReferrerWelcome(code: string, idempotencyKey?: string)
     throw new Error(message);
   }
   if (data?.error) throw new Error(data.error);
+}
+
+/** What deleting a referrer would orphan: attributed businesses and money already recorded.
+ *  Payouts and referred businesses reference the code as text, so a delete is only allowed when
+ *  both are zero; otherwise the affiliate should be deactivated to keep the ledger intact. */
+export async function referrerHistory(code: string): Promise<{ referred: number; paid: number; accrued: number }> {
+  const { data, error } = await sb.rpc("cs_referrers_summary", { p_search: code });
+  if (error) throw error;
+  const row = ((data ?? []) as Record<string, unknown>[]).find((r) => String(r.code).toUpperCase() === code.toUpperCase());
+  return {
+    referred: Number(row?.referred_count) || 0,
+    paid: Number(row?.paid) || 0,
+    accrued: Number(row?.accrued) || 0,
+  };
+}
+
+/** Atomic check + delete in one transaction under a per-code lock (cs_delete_referrer RPC);
+ *  raises with the counts when the affiliate has history. referrerHistory() stays for the
+ *  friendlier pre-check message in the UI. */
+export async function deleteReferrer(code: string): Promise<void> {
+  const { error } = await sb.rpc("cs_delete_referrer", { p_code: code });
+  if (error) throw error;
 }
 
 export async function setReferrerActive(code: string, active: boolean): Promise<void> {
@@ -146,6 +185,9 @@ export async function listApplications(): Promise<ReferrerApplication[]> {
     email: a.email == null ? null : String(a.email),
     howPromote: a.how_promote == null ? null : String(a.how_promote),
     status: String(a.status) as ReferrerApplication["status"], createdAt: String(a.created_at),
+    notifiedAt: a.notified_at == null ? null : String(a.notified_at),
+    notifiedKind: a.notified_kind === "welcome" || a.notified_kind === "decline" ? a.notified_kind : null,
+    notifyError: a.notify_error == null ? null : String(a.notify_error),
   }));
 }
 

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { PageHeader } from "@/components/PageHeader";
 import { LoadingState } from "@/components/states/LoadingState";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -14,6 +15,7 @@ import { toast } from "sonner";
 import {
   getReferralConfig, updateReferralConfig, listReferrers, saveReferrer, setReferrerActive, sendReferrerWelcome,
   listApplications, setApplicationStatus, listReferredBusinesses, listReferrerSummary, recordPayout,
+  sendApplicationDecline, referrerHistory, deleteReferrer,
   type Referrer, type ReferrerApplication, type ReferredBusiness, type ReferrerSummary,
 } from "@/lib/referrals";
 import { rewardFor, suggestCode, type ReferralConfig, type ReferrerKind } from "@/lib/referralMath";
@@ -248,6 +250,27 @@ function ReferrerForm({ state, config, onClose, onSaved, onToggle }: {
   // the provider replays instead of emailing the referrer twice.
   const welcomeKeyRef = useRef(crypto.randomUUID());
   const set = (p: Partial<Referrer>) => setR((x) => ({ ...x, ...p }));
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  // Delete only when nothing references the code (payouts and referred businesses carry it as
+  // text); otherwise steer to Deactivate so attribution and money records stay intact.
+  const askDelete = async () => {
+    try {
+      const h = await referrerHistory(r.code);
+      if (h.referred > 0 || h.paid > 0 || h.accrued > 0) {
+        toast.error(`${r.code} has ${h.referred} referred business${h.referred === 1 ? "" : "es"} and ${formatMoney(h.paid + h.accrued, "NGN")} in payouts. Deactivate it instead.`);
+        return;
+      }
+      setConfirmDelete(true);
+    } catch (e) { toast.error(msg(e)); }
+  };
+  const confirmDeleteNow = async () => {
+    setDeleting(true);
+    try { await deleteReferrer(r.code); toast.success(`${r.code} deleted`); setConfirmDelete(false); onSaved(); }
+    catch (e) { toast.error(msg(e)); }
+    finally { setDeleting(false); }
+  };
 
   const save = async () => {
     if (!r.name.trim() || !r.phone.trim()) return toast.error("Name and phone are required");
@@ -309,7 +332,23 @@ function ReferrerForm({ state, config, onClose, onSaved, onToggle }: {
           </label>
         )}
         <div className="flex items-center justify-between gap-2 pt-1">
-          {!state.isNew ? <Button variant="ghost" size="sm" onClick={() => onToggle(r.code, !r.active)}>{r.active ? "Deactivate" : "Reactivate"}</Button> : <span />}
+          {!state.isNew ? (
+            <div className="flex gap-1">
+              <Button variant="ghost" size="sm" onClick={() => onToggle(r.code, !r.active)}>{r.active ? "Deactivate" : "Reactivate"}</Button>
+              <Button variant="ghost" size="sm" className="text-destructive" onClick={askDelete}>Delete</Button>
+            </div>
+          ) : <span />}
+          <ConfirmDialog
+            open={confirmDelete}
+            onOpenChange={setConfirmDelete}
+            title={`Delete affiliate ${r.code}?`}
+            description={`${r.name} has no referred businesses or payouts, so nothing is orphaned. This cannot be undone. Type the code to confirm.`}
+            confirmLabel="Delete affiliate"
+            variant="danger"
+            confirmPhrase={r.code}
+            busy={deleting}
+            onConfirm={confirmDeleteNow}
+          />
           <div className="flex gap-2">
             <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
             <Button size="sm" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save"}</Button>
@@ -325,9 +364,20 @@ function ApplicationsTab({ isAdmin, onChange }: { isAdmin: boolean; onChange: ()
   const [rows, setRows] = useState<ReferrerApplication[] | null>(null);
   const load = () => listApplications().then(setRows).catch((e) => toast.error(msg(e)));
   useEffect(() => { load(); }, []);
-  // Per-application welcome-email keys: approving again after a failed email retries with the
-  // same key, so the provider replays instead of double-sending.
-  const welcomeKeysRef = useRef<Record<string, string>>({});
+  // Approve/Reject go through a confirmation: both email the applicant and can't be undone.
+  const [decision, setDecision] = useState<{ a: ReferrerApplication; kind: "approve" | "reject" } | null>(null);
+  const [deciding, setDeciding] = useState(false);
+  const confirmDecision = async () => {
+    if (!decision) return;
+    setDeciding(true);
+    try {
+      if (decision.kind === "approve") await approve(decision.a);
+      else await reject(decision.a);
+    } finally {
+      setDeciding(false);
+      setDecision(null);
+    }
+  };
 
   const approve = async (a: ReferrerApplication) => {
     try {
@@ -336,32 +386,73 @@ function ApplicationsTab({ isAdmin, onChange }: { isAdmin: boolean; onChange: ()
       await saveReferrer({ code, name: a.name, kind: "affiliate", phone: a.phone, email: a.email, bankName: null, accountNumber: null, accountName: null, sharePercent: null, active: true, notes: "From website application" }, true);
       await setApplicationStatus(a.id, "approved");
       try {
-        if (a.email) await sendReferrerWelcome(code, (welcomeKeysRef.current[a.id] ??= crypto.randomUUID()));
+        if (a.email) await sendReferrerWelcome(code, undefined, a.id);
+        else toast.warning("Approved, but this application has no email, so no welcome was sent.");
       } catch (e) { toast.warning(`Affiliate created, but the email didn't send: ${msg(e)}`); }
       toast.success(`Approved — ${a.name} added as an affiliate (${code})`);
       load(); onChange();
     } catch (e) { toast.error(msg(e)); }
   };
-  const reject = async (id: string) => {
-    try { await setApplicationStatus(id, "rejected"); toast.success("Rejected"); load(); onChange(); }
-    catch (e) { toast.error(msg(e)); }
+  const reject = async (a: ReferrerApplication) => {
+    try {
+      await setApplicationStatus(a.id, "rejected");
+      try {
+        if (a.email) await sendApplicationDecline(a.id);
+        else toast.warning("Rejected, but this application has no email, so no decline was sent.");
+      } catch (e) { toast.warning(`Rejected, but the email didn't send: ${msg(e)}`); }
+      toast.success("Rejected"); load(); onChange();
+    } catch (e) { toast.error(msg(e)); }
+  };
+  // Re-attempt the outcome email for an already-decided application. The function derives the
+  // idempotency key from the application id, so a provider that already delivered replays
+  // instead of double-sending, even after a remount or from another device.
+  const resend = async (a: ReferrerApplication) => {
+    try {
+      if (a.status === "approved") await sendReferrerWelcome(suggestCode(a.name, a.phone), undefined, a.id);
+      else await sendApplicationDecline(a.id);
+      toast.success(`Email sent to ${a.email}`); load();
+    } catch (e) { toast.error(`Email didn't send: ${msg(e)}`); load(); }
+  };
+  const emailState = (a: ReferrerApplication) => {
+    if (!a.email) return <span className="text-muted-foreground">No email on file</span>;
+    if (a.notifyError) return <span className="text-destructive">Failed: {a.notifyError}</span>;
+    if (a.notifiedAt) return <span className="text-emerald-700">{a.notifiedKind === "decline" ? "Decline" : "Welcome"} sent {formatDate(a.notifiedAt)}</span>;
+    return <span className="text-muted-foreground">{a.status === "pending" ? "·" : "Not sent"}</span>;
   };
 
   if (rows == null) return <LoadingState />;
   return (
     <div className="overflow-x-auto rounded-xl border border-border/60">
+      {decision && (
+        <ConfirmDialog
+          open
+          onOpenChange={(open) => !open && !deciding && setDecision(null)}
+          title={decision.kind === "approve" ? `Approve ${decision.a.name}?` : `Reject ${decision.a.name}?`}
+          description={
+            decision.kind === "approve"
+              ? `This creates the affiliate ${suggestCode(decision.a.name, decision.a.phone)} and emails ${decision.a.email ?? "them (no email on file, so nothing is sent)"} their code and share link.`
+              : `This marks the application as rejected and emails ${decision.a.email ?? "them (no email on file, so nothing is sent)"} a polite decline.`
+          }
+          confirmLabel={decision.kind === "approve" ? "Approve and email" : "Reject and email"}
+          variant={decision.kind === "approve" ? "default" : "danger"}
+          busy={deciding}
+          onConfirm={confirmDecision}
+        />
+      )}
       <Table>
-        <TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Contact</TableHead><TableHead>How they'll promote</TableHead><TableHead>Status</TableHead>{isAdmin && <TableHead></TableHead>}</TableRow></TableHeader>
+        <TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Contact</TableHead><TableHead>How they'll promote</TableHead><TableHead>Status</TableHead><TableHead>Email</TableHead>{isAdmin && <TableHead></TableHead>}</TableRow></TableHeader>
         <TableBody>
-          {rows.length === 0 && <TableRow><TableCell colSpan={5} className="py-8 text-center text-muted-foreground">No affiliate applications yet.</TableCell></TableRow>}
+          {rows.length === 0 && <TableRow><TableCell colSpan={6} className="py-8 text-center text-muted-foreground">No affiliate applications yet.</TableCell></TableRow>}
           {rows.map((a) => (
             <TableRow key={a.id}>
               <TableCell className="font-medium text-brand-dark">{a.name}</TableCell>
               <TableCell className="text-muted-foreground"><div>{a.phone}</div>{a.email && <div className="text-xs">{a.email}</div>}</TableCell>
               <TableCell className="max-w-sm text-sm text-muted-foreground">{a.howPromote || "—"}</TableCell>
               <TableCell><Badge variant={a.status === "approved" ? "default" : a.status === "rejected" ? "destructive" : "secondary"}>{a.status}</Badge></TableCell>
+              <TableCell className="text-xs">{emailState(a)}</TableCell>
               {isAdmin && <TableCell className="text-right whitespace-nowrap">
-                {a.status === "pending" && <><Button variant="ghost" size="sm" onClick={() => approve(a)}>Approve</Button><Button variant="ghost" size="sm" onClick={() => reject(a.id)}>Reject</Button></>}
+                {a.status === "pending" && <><Button variant="ghost" size="sm" onClick={() => setDecision({ a, kind: "approve" })}>Approve</Button><Button variant="ghost" size="sm" onClick={() => setDecision({ a, kind: "reject" })}>Reject</Button></>}
+                {a.status !== "pending" && a.email && (a.notifyError || !a.notifiedAt) && <Button variant="ghost" size="sm" onClick={() => resend(a)}>Send email</Button>}
               </TableCell>}
             </TableRow>
           ))}
