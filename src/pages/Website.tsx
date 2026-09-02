@@ -21,6 +21,7 @@ import {
   listCopy,
   listPosts,
   listTestimonials,
+  removeCmsMedia,
   saveChangelog,
   saveCopy,
   savePost,
@@ -77,9 +78,27 @@ function EditorShell({
 
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
-    ref.current?.querySelector<HTMLElement>("input, select, textarea")?.focus();
+    const FOCUSABLE =
+      'a[href], button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])';
+    ref.current
+      ?.querySelector<HTMLElement>("input:not(:disabled), select:not(:disabled), textarea:not(:disabled)")
+      ?.focus();
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") return onClose();
+      if (e.key !== "Tab") return;
+      const nodes = ref.current?.querySelectorAll<HTMLElement>(FOCUSABLE);
+      if (!nodes || nodes.length === 0) return;
+      const first = nodes[0];
+      const last = nodes[nodes.length - 1];
+      const active = document.activeElement;
+      const inside = !!active && !!ref.current?.contains(active);
+      if (e.shiftKey && (active === first || !inside)) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && (active === last || !inside)) {
+        e.preventDefault();
+        first.focus();
+      }
     };
     document.addEventListener("keydown", onKey);
     return () => {
@@ -490,13 +509,21 @@ function PostsTab({ isAdmin }: { isAdmin: boolean }) {
 
 function PostDialog({
   post,
-  onClose,
+  onClose: dismiss,
   onDone,
 }: {
   post: CmsPost | null;
   onClose: () => void;
   onDone: () => void;
 }) {
+  // Covers uploaded in this dialog session that never made it into a saved post are removed
+  // again on cancel/replace, so the public bucket doesn't collect orphans.
+  const sessionUploads = useRef<string[]>([]);
+  const onClose = () => {
+    for (const u of sessionUploads.current) if (u !== post?.coverUrl) void removeCmsMedia(u);
+    sessionUploads.current = [];
+    dismiss();
+  };
   const [title, setTitle] = useState(post?.title ?? "");
   const [slug, setSlug] = useState(post?.slug ?? "");
   const [slugTouched, setSlugTouched] = useState(!!post);
@@ -517,7 +544,9 @@ function PostDialog({
   const upload = async (file: File) => {
     setUploading(true);
     try {
-      setCoverUrl(await uploadCmsMedia(file));
+      const url = await uploadCmsMedia(file);
+      sessionUploads.current.push(url);
+      setCoverUrl(url);
       toast.success("Cover uploaded");
     } catch (e) {
       toast.error(msg(e));
@@ -546,6 +575,10 @@ function PostDialog({
         author: author.trim(),
         publishedAt: published ? (post?.publishedAt ?? new Date().toISOString()) : null,
       });
+      const finalCover = coverUrl.trim();
+      for (const u of sessionUploads.current) if (u !== finalCover) void removeCmsMedia(u);
+      if (post?.coverUrl && post.coverUrl !== finalCover) void removeCmsMedia(post.coverUrl);
+      sessionUploads.current = [];
       toast.success(post ? "Post saved" : "Post created");
       onDone();
     } catch (e) {

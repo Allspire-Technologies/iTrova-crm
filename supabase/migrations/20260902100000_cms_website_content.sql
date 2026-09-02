@@ -169,7 +169,8 @@ insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_typ
 values ('cms-media', 'cms-media', true, 5242880, array['image/png','image/jpeg','image/webp','image/avif'])
 on conflict (id) do nothing;
 update storage.buckets
-set file_size_limit = 5242880,
+set public = true,
+    file_size_limit = 5242880,
     allowed_mime_types = array['image/png','image/jpeg','image/webp','image/avif']
 where id = 'cms-media';
 

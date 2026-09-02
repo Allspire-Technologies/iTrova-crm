@@ -157,8 +157,26 @@ export async function savePost(post: {
 }
 
 export async function deletePost(id: string): Promise<void> {
+  const { data } = await sb.from("cms_post").select("cover_url").eq("id", id).maybeSingle();
   const { error } = await sb.from("cms_post").delete().eq("id", id);
   if (error) throw error;
+  if (data?.cover_url) void removeCmsMedia(data.cover_url);
+}
+
+const MEDIA_PUBLIC_PREFIX = "/storage/v1/object/public/cms-media/";
+
+/** Best-effort removal of a cms-media object by its public URL. Ignores URLs outside the
+ *  bucket and swallows failures: cleanup must never mask the operation that triggered it. */
+export async function removeCmsMedia(url: string): Promise<void> {
+  try {
+    const path = new URL(url).pathname;
+    const idx = path.indexOf(MEDIA_PUBLIC_PREFIX);
+    if (idx === -1) return;
+    const objectPath = decodeURIComponent(path.slice(idx + MEDIA_PUBLIC_PREFIX.length));
+    if (objectPath) await supabase.storage.from("cms-media").remove([objectPath]);
+  } catch {
+    /* best-effort */
+  }
 }
 
 export async function listTestimonials(): Promise<CmsTestimonial[]> {
