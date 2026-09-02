@@ -11,6 +11,7 @@ import {
   ListChecks,
   Mail,
   Gift,
+  Globe,
   Megaphone,
   Settings,
   LogOut,
@@ -30,6 +31,7 @@ const nav = [
   { to: "/messages", label: "Messages", icon: Mail },
   { to: "/referrals", label: "Referrals", icon: Gift },
   { to: "/marketing", label: "Marketing", icon: Megaphone },
+  { to: "/website", label: "Website", icon: Globe },
   { to: "/tasks", label: "Tasks", icon: ListChecks },
   { to: "/settings", label: "Settings", icon: Settings },
 ];
