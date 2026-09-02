@@ -1,6 +1,6 @@
 import { ReactNode, useCallback, useEffect, useId, useRef, useState } from "react";
 import { toast } from "sonner";
-import { Plus, Upload } from "lucide-react";
+import { ChevronDown, ChevronUp, Plus, Trash2, Upload } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { LoadingState } from "@/components/states/LoadingState";
@@ -10,9 +10,16 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useAuth } from "@/contexts/AuthContext";
 import {
   ChangelogEntry,
+  CmsGuideSection,
   CmsPost,
   CmsCopy,
   CmsTestimonial,
+  GuideFigure,
+  GuideStep,
+  KNOWN_GUIDE_SLUGS,
+  deleteGuideSection,
+  listGuideSections,
+  saveGuideSection,
   deleteChangelog,
   deleteCopy,
   deletePost,
@@ -39,6 +46,7 @@ import { cn } from "@/lib/utils";
 const TABS = [
   { key: "changelog", label: "What's new" },
   { key: "posts", label: "Blog" },
+  { key: "guide", label: "Guide" },
   { key: "testimonials", label: "Testimonials" },
   { key: "copy", label: "Page copy" },
 ] as const;
@@ -75,6 +83,11 @@ function EditorShell({
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const titleId = useId();
+  // Kept in a ref so the mount effect below never re-runs: a dialog that recreates its onClose
+  // on each render (e.g. the blog editor's cleanup wrapper) must not re-trigger initial focus,
+  // which yanked the caret back to the first field while typing.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
@@ -84,7 +97,7 @@ function EditorShell({
       ?.querySelector<HTMLElement>("input:not(:disabled), select:not(:disabled), textarea:not(:disabled)")
       ?.focus();
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") return onClose();
+      if (e.key === "Escape") return onCloseRef.current();
       if (e.key !== "Tab") return;
       const nodes = ref.current?.querySelectorAll<HTMLElement>(FOCUSABLE);
       if (!nodes || nodes.length === 0) return;
@@ -105,7 +118,7 @@ function EditorShell({
       document.removeEventListener("keydown", onKey);
       previous?.focus?.();
     };
-  }, [onClose]);
+  }, []);
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" onClick={onClose}>
@@ -179,6 +192,7 @@ export default function Website() {
       <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`}>
         {tab === "changelog" && <ChangelogTab isAdmin={isAdmin} />}
         {tab === "posts" && <PostsTab isAdmin={isAdmin} />}
+        {tab === "guide" && <GuideTab isAdmin={isAdmin} />}
         {tab === "testimonials" && <TestimonialsTab isAdmin={isAdmin} />}
         {tab === "copy" && <CopyTab isAdmin={isAdmin} />}
       </div>
@@ -655,6 +669,401 @@ function PostDialog({
           <input type="checkbox" checked={published} onChange={(e) => setPublished(e.target.checked)} />
           Published
         </label>
+        <div className="flex justify-end gap-2 pt-1">
+          <Button variant="ghost" size="sm" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button size="sm" onClick={confirm} disabled={busy}>
+            {busy ? "Saving…" : "Save"}
+          </Button>
+        </div>
+    </EditorShell>
+  );
+}
+
+/* ---------------------------------- Guide --------------------------------- */
+
+function GuideTab({ isAdmin }: { isAdmin: boolean }) {
+  const [rows, setRows] = useState<CmsGuideSection[] | null>(null);
+  const [editing, setEditing] = useState<CmsGuideSection | "new" | null>(null);
+  const [removing, setRemoving] = useState<CmsGuideSection | null>(null);
+
+  const reload = useCallback(() => {
+    listGuideSections().then(setRows).catch((e) => {
+      setRows([]);
+      toast.error(msg(e));
+    });
+  }, []);
+  useEffect(reload, [reload]);
+
+  return (
+    <section>
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <p className="text-sm text-muted-foreground">
+          A published section whose slug matches a built-in one replaces it on the site's guide;
+          any other slug adds a new section. Untouched sections keep the site's built-in content.
+        </p>
+        {isAdmin && (
+          <Button size="sm" onClick={() => setEditing("new")}>
+            <Plus /> New section
+          </Button>
+        )}
+      </div>
+      {rows == null ? (
+        <LoadingState />
+      ) : (
+        <div className="overflow-x-auto rounded-xl border border-border/60">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Slug</TableHead>
+                <TableHead>Title</TableHead>
+                <TableHead>Roles</TableHead>
+                <TableHead className="text-right tabular-nums">Steps</TableHead>
+                <TableHead className="text-right tabular-nums">Figures</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rows.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
+                    No overrides yet. The site shows its built-in guide.
+                  </TableCell>
+                </TableRow>
+              )}
+              {rows.map((r) => (
+                <TableRow key={r.id}>
+                  <TableCell className="font-mono text-sm font-medium">
+                    {r.slug}
+                    {KNOWN_GUIDE_SLUGS.includes(r.slug) && (
+                      <span className="ml-2 rounded-full bg-brand-light px-2 py-0.5 text-[11px] font-medium text-brand-dark">
+                        overrides built-in
+                      </span>
+                    )}
+                  </TableCell>
+                  <TableCell>{r.title}</TableCell>
+                  <TableCell className="text-muted-foreground">{r.roles.join(", ") || "·"}</TableCell>
+                  <TableCell className="text-right tabular-nums">{r.steps.length}</TableCell>
+                  <TableCell className="text-right tabular-nums">{r.figures.length}</TableCell>
+                  <TableCell>
+                    <PublishedPill on={r.published} />
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {isAdmin && (
+                      <>
+                        <Button variant="ghost" size="sm" onClick={() => setEditing(r)}>
+                          Edit
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={() => setRemoving(r)}>
+                          Delete
+                        </Button>
+                      </>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+      {editing && (
+        <GuideDialog
+          section={editing === "new" ? null : editing}
+          onClose={() => setEditing(null)}
+          onDone={() => {
+            setEditing(null);
+            reload();
+          }}
+        />
+      )}
+      {removing && (
+        <ConfirmDialog
+          open
+          onOpenChange={(open) => !open && setRemoving(null)}
+          title="Delete this guide section?"
+          description={
+            KNOWN_GUIDE_SLUGS.includes(removing.slug)
+              ? `"${removing.title}" will be removed and the site falls back to the built-in "${removing.slug}" section.`
+              : `"${removing.title}" will disappear from the site's guide immediately.`
+          }
+          confirmLabel="Delete"
+          variant="danger"
+          onConfirm={async () => {
+            try {
+              await deleteGuideSection(removing.id);
+              toast.success("Section deleted");
+              setRemoving(null);
+              reload();
+            } catch (e) {
+              toast.error(msg(e));
+            }
+          }}
+        />
+      )}
+    </section>
+  );
+}
+
+const GUIDE_ROLES = ["Owner", "Manager", "Cashier"] as const;
+
+function GuideDialog({
+  section,
+  onClose,
+  onDone,
+}: {
+  section: CmsGuideSection | null;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const [slug, setSlug] = useState(section?.slug ?? "");
+  const [title, setTitle] = useState(section?.title ?? "");
+  const [summary, setSummary] = useState(section?.summary ?? "");
+  const [roles, setRoles] = useState<string[]>(section?.roles ?? ["Owner"]);
+  const [steps, setSteps] = useState<GuideStep[]>(
+    section?.steps.length ? section.steps : [{ text: "" }],
+  );
+  const [tip, setTip] = useState(section?.tip ?? "");
+  const [figures, setFigures] = useState<GuideFigure[]>(section?.figures ?? []);
+  const [published, setPublished] = useState(section?.published ?? false);
+  const [sort, setSort] = useState(String(section?.sort ?? 0));
+  const [busy, setBusy] = useState(false);
+  const [uploadingAt, setUploadingAt] = useState<number | null>(null);
+
+  const setStep = (i: number, patch: Partial<GuideStep>) =>
+    setSteps((s) => s.map((step, idx) => (idx === i ? { ...step, ...patch } : step)));
+  const moveStep = (i: number, dir: -1 | 1) =>
+    setSteps((s) => {
+      const j = i + dir;
+      if (j < 0 || j >= s.length) return s;
+      const next = [...s];
+      [next[i], next[j]] = [next[j], next[i]];
+      return next;
+    });
+
+  const setFigure = (i: number, patch: Partial<GuideFigure>) =>
+    setFigures((f) => f.map((fig, idx) => (idx === i ? { ...fig, ...patch } : fig)));
+
+  const uploadFigure = async (i: number, file: File) => {
+    setUploadingAt(i);
+    try {
+      setFigure(i, { src: await uploadCmsMedia(file) });
+      toast.success("Screenshot uploaded");
+    } catch (e) {
+      toast.error(msg(e));
+    } finally {
+      setUploadingAt(null);
+    }
+  };
+
+  const confirm = async () => {
+    const cleanSteps = steps
+      .map((s) => ({ text: s.text.trim(), ...(s.note?.trim() ? { note: s.note.trim() } : {}) }))
+      .filter((s) => s.text);
+    const cleanFigures = figures
+      .map((f) => ({
+        src: f.src.trim(),
+        alt: f.alt.trim(),
+        ...(f.caption?.trim() ? { caption: f.caption.trim() } : {}),
+        ...(f.device === "mobile" ? { device: "mobile" as const } : {}),
+      }))
+      .filter((f) => f.src);
+    if (!slug.trim() || !title.trim()) return toast.error("Slug and title are required");
+    if (cleanSteps.length === 0) return toast.error("Add at least one step");
+    if (roles.length === 0) return toast.error("Pick at least one role");
+    if (cleanFigures.some((f) => !f.alt)) return toast.error("Every figure needs alt text");
+    const allCopy = [title, summary, tip, ...cleanSteps.map((s) => `${s.text}${s.note ?? ""}`), ...cleanFigures.map((f) => `${f.alt}${f.caption ?? ""}`)].join("");
+    if (/—/.test(allCopy)) return toast.error("Remove em dashes (—) from the copy");
+    setBusy(true);
+    try {
+      await saveGuideSection({
+        id: section?.id,
+        slug: slug.trim(),
+        title: title.trim(),
+        summary: summary.trim(),
+        roles,
+        steps: cleanSteps,
+        tip: tip.trim(),
+        figures: cleanFigures,
+        published,
+        sort: Number(sort) || 0,
+      });
+      toast.success(section ? "Section saved" : "Section created");
+      onDone();
+    } catch (e) {
+      toast.error(msg(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <EditorShell wide title={section ? `Edit "${section.slug}"` : "New guide section"} onClose={onClose}>
+        <label className="block text-xs text-muted-foreground">
+          Slug (match a built-in slug to override it on the site)
+          <Input list="guide-slugs" value={slug} onChange={(e) => setSlug(e.target.value)} />
+          <datalist id="guide-slugs">
+            {KNOWN_GUIDE_SLUGS.map((s) => (
+              <option key={s} value={s} />
+            ))}
+          </datalist>
+        </label>
+        <label className="block text-xs text-muted-foreground">
+          Title
+          <Input value={title} onChange={(e) => setTitle(e.target.value)} />
+        </label>
+        <label className="block text-xs text-muted-foreground">
+          Summary (one line under the title)
+          <textarea
+            className="mt-1 min-h-16 w-full rounded-md border border-input bg-background p-3 text-sm"
+            value={summary}
+            onChange={(e) => setSummary(e.target.value)}
+          />
+        </label>
+        <fieldset>
+          <legend className="text-xs text-muted-foreground">Shown to roles</legend>
+          <div className="mt-1 flex gap-4">
+            {GUIDE_ROLES.map((r) => (
+              <label key={r} className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={roles.includes(r)}
+                  onChange={(e) =>
+                    setRoles((prev) => (e.target.checked ? [...prev, r] : prev.filter((x) => x !== r)))
+                  }
+                />
+                {r}
+              </label>
+            ))}
+          </div>
+        </fieldset>
+        <fieldset>
+          <legend className="text-xs text-muted-foreground">Steps (numbered on the site)</legend>
+          <div className="mt-1 space-y-2">
+            {steps.map((s, i) => (
+              <div key={i} className="rounded-lg border border-border/60 p-2">
+                <div className="flex items-start gap-2">
+                  <span className="mt-2 w-5 text-right text-xs tabular-nums text-muted-foreground">{i + 1}.</span>
+                  <div className="flex-1 space-y-1">
+                    <textarea
+                      aria-label={`Step ${i + 1} text`}
+                      className="min-h-14 w-full rounded-md border border-input bg-background p-2 text-sm"
+                      value={s.text}
+                      onChange={(e) => setStep(i, { text: e.target.value })}
+                    />
+                    <Input
+                      aria-label={`Step ${i + 1} note (optional)`}
+                      placeholder="Optional note shown under the step"
+                      value={s.note ?? ""}
+                      onChange={(e) => setStep(i, { note: e.target.value })}
+                    />
+                  </div>
+                  <div className="flex flex-col">
+                    <Button variant="ghost" size="icon" aria-label={`Move step ${i + 1} up`} disabled={i === 0} onClick={() => moveStep(i, -1)}>
+                      <ChevronUp />
+                    </Button>
+                    <Button variant="ghost" size="icon" aria-label={`Move step ${i + 1} down`} disabled={i === steps.length - 1} onClick={() => moveStep(i, 1)}>
+                      <ChevronDown />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label={`Remove step ${i + 1}`}
+                      disabled={steps.length === 1}
+                      onClick={() => setSteps((prev) => prev.filter((_, idx) => idx !== i))}
+                    >
+                      <Trash2 />
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ))}
+            <Button variant="outline" size="sm" onClick={() => setSteps((prev) => [...prev, { text: "" }])}>
+              <Plus /> Add step
+            </Button>
+          </div>
+        </fieldset>
+        <label className="block text-xs text-muted-foreground">
+          Tip (optional callout under the steps)
+          <textarea
+            className="mt-1 min-h-14 w-full rounded-md border border-input bg-background p-3 text-sm"
+            value={tip}
+            onChange={(e) => setTip(e.target.value)}
+          />
+        </label>
+        <fieldset>
+          <legend className="text-xs text-muted-foreground">Figures (screenshots)</legend>
+          <div className="mt-1 space-y-2">
+            {figures.map((f, i) => (
+              <div key={i} className="space-y-1 rounded-lg border border-border/60 p-2">
+                <div className="flex items-end gap-2">
+                  <label className="block flex-1 text-xs text-muted-foreground">
+                    Image URL
+                    <Input value={f.src} onChange={(e) => setFigure(i, { src: e.target.value })} />
+                  </label>
+                  <label className="inline-flex cursor-pointer items-center">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        e.target.value = "";
+                        if (file) uploadFigure(i, file);
+                      }}
+                    />
+                    <span className="inline-flex h-10 items-center gap-2 rounded-md border border-input px-3 text-sm">
+                      <Upload className="size-4" /> {uploadingAt === i ? "Uploading…" : "Upload"}
+                    </span>
+                  </label>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label={`Remove figure ${i + 1}`}
+                    onClick={() => setFigures((prev) => prev.filter((_, idx) => idx !== i))}
+                  >
+                    <Trash2 />
+                  </Button>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <label className="block flex-1 text-xs text-muted-foreground">
+                    Alt text (required)
+                    <Input value={f.alt} onChange={(e) => setFigure(i, { alt: e.target.value })} />
+                  </label>
+                  <label className="block flex-1 text-xs text-muted-foreground">
+                    Caption
+                    <Input value={f.caption ?? ""} onChange={(e) => setFigure(i, { caption: e.target.value })} />
+                  </label>
+                  <label className="block text-xs text-muted-foreground">
+                    Device
+                    <select
+                      className="mt-1 h-10 rounded-md border border-input bg-background px-3 text-sm"
+                      value={f.device === "mobile" ? "mobile" : "desktop"}
+                      onChange={(e) => setFigure(i, { device: e.target.value as "desktop" | "mobile" })}
+                    >
+                      <option value="desktop">Desktop</option>
+                      <option value="mobile">Mobile</option>
+                    </select>
+                  </label>
+                </div>
+              </div>
+            ))}
+            <Button variant="outline" size="sm" onClick={() => setFigures((prev) => [...prev, { src: "", alt: "" }])}>
+              <Plus /> Add figure
+            </Button>
+          </div>
+        </fieldset>
+        <div className="flex items-center gap-4">
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={published} onChange={(e) => setPublished(e.target.checked)} />
+            Published
+          </label>
+          <label className="flex items-center gap-2 text-xs text-muted-foreground">
+            Sort
+            <Input className="w-20" type="number" value={sort} onChange={(e) => setSort(e.target.value)} />
+          </label>
+        </div>
         <div className="flex justify-end gap-2 pt-1">
           <Button variant="ghost" size="sm" onClick={onClose}>
             Cancel

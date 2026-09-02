@@ -46,6 +46,55 @@ export interface CmsCopy {
   updatedAt: string;
 }
 
+export interface GuideStep {
+  text: string;
+  note?: string;
+}
+
+export interface GuideFigure {
+  src: string;
+  alt: string;
+  caption?: string;
+  device?: "desktop" | "mobile";
+}
+
+export interface CmsGuideSection {
+  id: string;
+  slug: string;
+  title: string;
+  summary: string;
+  roles: string[];
+  steps: GuideStep[];
+  tip: string | null;
+  figures: GuideFigure[];
+  published: boolean;
+  sort: number;
+}
+
+/** The site's built-in guide section slugs. A CMS section with a matching slug OVERRIDES that
+ *  section on the site; any other slug appends a new section. Keep in sync with the website
+ *  repo's src/data/userGuide.ts ids. */
+export const KNOWN_GUIDE_SLUGS = [
+  "getting-started",
+  "dashboard",
+  "inventory",
+  "point-of-sale",
+  "invoices",
+  "export-invoices",
+  "working-offline",
+  "suppliers",
+  "raw-materials",
+  "production",
+  "purchase-orders",
+  "general-store",
+  "expenditure",
+  "accounting",
+  "assets",
+  "reports",
+  "team",
+  "settings",
+];
+
 /* eslint-disable @typescript-eslint/no-explicit-any */
 const mapChangelog = (r: any): ChangelogEntry => ({
   id: r.id,
@@ -205,6 +254,65 @@ export async function saveTestimonial(t: {
 
 export async function deleteTestimonial(id: string): Promise<void> {
   const { error } = await sb.from("cms_testimonial").delete().eq("id", id);
+  if (error) throw error;
+}
+
+/* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+const mapGuideSection = (r: any): CmsGuideSection => ({
+  id: r.id,
+  slug: r.slug,
+  title: r.title,
+  summary: r.summary ?? "",
+  roles: Array.isArray(r.roles) ? r.roles : [],
+  steps: Array.isArray(r.steps) ? r.steps : [],
+  tip: r.tip ?? null,
+  figures: Array.isArray(r.figures) ? r.figures : [],
+  published: !!r.published,
+  sort: r.sort ?? 0,
+});
+
+export async function listGuideSections(): Promise<CmsGuideSection[]> {
+  const { data, error } = await sb
+    .from("cms_guide_section")
+    .select("*")
+    .order("sort", { ascending: true })
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+  return (data ?? []).map(mapGuideSection);
+}
+
+export async function saveGuideSection(s: {
+  id?: string;
+  slug: string;
+  title: string;
+  summary: string;
+  roles: string[];
+  steps: GuideStep[];
+  tip: string;
+  figures: GuideFigure[];
+  published: boolean;
+  sort: number;
+}): Promise<void> {
+  const row = {
+    slug: s.slug,
+    title: s.title,
+    summary: s.summary,
+    roles: s.roles,
+    steps: s.steps,
+    tip: s.tip || null,
+    figures: s.figures,
+    published: s.published,
+    sort: s.sort,
+  };
+  const q = s.id
+    ? sb.from("cms_guide_section").update(row).eq("id", s.id)
+    : sb.from("cms_guide_section").insert(row);
+  const { error } = await q;
+  if (error) throw error;
+}
+
+export async function deleteGuideSection(id: string): Promise<void> {
+  const { error } = await sb.from("cms_guide_section").delete().eq("id", id);
   if (error) throw error;
 }
 
