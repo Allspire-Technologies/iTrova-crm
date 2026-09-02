@@ -42,6 +42,7 @@ export interface CmsTestimonial {
 export interface CmsCopy {
   key: string;
   value: unknown;
+  published: boolean;
   updatedAt: string;
 }
 
@@ -193,11 +194,16 @@ export async function listCopy(): Promise<CmsCopy[]> {
   const { data, error } = await sb.from("cms_copy").select("*").order("key");
   if (error) throw error;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return (data ?? []).map((r: any) => ({ key: r.key, value: r.value, updatedAt: r.updated_at }));
+  return (data ?? []).map((r: any) => ({
+    key: r.key,
+    value: r.value,
+    published: !!r.published,
+    updatedAt: r.updated_at,
+  }));
 }
 
-export async function saveCopy(key: string, value: unknown): Promise<void> {
-  const { error } = await sb.from("cms_copy").upsert({ key, value });
+export async function saveCopy(key: string, value: unknown, published: boolean): Promise<void> {
+  const { error } = await sb.from("cms_copy").upsert({ key, value, published });
   if (error) throw error;
 }
 
@@ -206,9 +212,20 @@ export async function deleteCopy(key: string): Promise<void> {
   if (error) throw error;
 }
 
-/** Upload a blog cover to the public cms-media bucket; returns the public URL. */
+const MAX_MEDIA_BYTES = 5 * 1024 * 1024;
+const MEDIA_EXT: Record<string, string> = {
+  "image/png": "png",
+  "image/jpeg": "jpg",
+  "image/webp": "webp",
+  "image/avif": "avif",
+};
+
+/** Upload a blog cover to the public cms-media bucket; returns the public URL.
+ *  Type/size are checked here AND enforced on the bucket itself (see the cms migration). */
 export async function uploadCmsMedia(file: File): Promise<string> {
-  const ext = file.name.split(".").pop()?.toLowerCase() || "png";
+  const ext = MEDIA_EXT[file.type];
+  if (!ext) throw new Error("Use a PNG, JPEG, WebP or AVIF image.");
+  if (file.size > MAX_MEDIA_BYTES) throw new Error("Image is over 5 MB. Resize it and try again.");
   const path = `covers/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
   const { error } = await supabase.storage.from("cms-media").upload(path, file, {
     cacheControl: "31536000",
@@ -224,6 +241,6 @@ export function slugify(title: string): string {
     .toLowerCase()
     .replace(/['’]/g, "")
     .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 80);
+    .slice(0, 80)
+    .replace(/^-+|-+$/g, "");
 }

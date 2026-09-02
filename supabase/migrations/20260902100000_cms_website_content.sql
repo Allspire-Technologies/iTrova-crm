@@ -63,8 +63,10 @@ create table if not exists public.cms_guide_section (
 create table if not exists public.cms_copy (
   key text primary key,
   value jsonb not null default '{}'::jsonb,
+  published boolean not null default false,
   updated_at timestamptz not null default now()
 );
+alter table public.cms_copy add column if not exists published boolean not null default false;
 
 create index if not exists cms_post_published_at_idx on public.cms_post (published_at desc);
 create index if not exists cms_changelog_sort_idx on public.cms_changelog (sort desc, entry_date desc);
@@ -152,7 +154,7 @@ grant select, insert, update, delete on public.cms_guide_section to authenticate
 alter table public.cms_copy enable row level security;
 drop policy if exists "cms copy public read" on public.cms_copy;
 create policy "cms copy public read" on public.cms_copy for select to anon, authenticated
-  using (true);
+  using (published = true or public.is_platform_admin());
 drop policy if exists "cms admin write" on public.cms_copy;
 create policy "cms admin write" on public.cms_copy for all to authenticated
   using (public.cs_my_role() = 'admin') with check (public.cs_my_role() = 'admin');
@@ -161,9 +163,15 @@ grant select on public.cms_copy to anon;
 grant select, insert, update, delete on public.cms_copy to authenticated;
 
 -- First Storage use in the stack: a public-read bucket for blog covers and future CMS media.
-insert into storage.buckets (id, name, public)
-values ('cms-media', 'cms-media', true)
+-- Size/type limits are enforced by the bucket itself, not just the console's client check;
+-- the update keeps an already-created bucket (staging) in line on re-apply.
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('cms-media', 'cms-media', true, 5242880, array['image/png','image/jpeg','image/webp','image/avif'])
 on conflict (id) do nothing;
+update storage.buckets
+set file_size_limit = 5242880,
+    allowed_mime_types = array['image/png','image/jpeg','image/webp','image/avif']
+where id = 'cms-media';
 
 drop policy if exists "cms media public read" on storage.objects;
 create policy "cms media public read" on storage.objects for select to anon, authenticated

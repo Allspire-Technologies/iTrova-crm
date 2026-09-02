@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { ReactNode, useCallback, useEffect, useId, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Plus, Upload } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
@@ -59,10 +59,70 @@ function PublishedPill({ on, offLabel = "Draft" }: { on: boolean; offLabel?: str
   );
 }
 
+// Shared accessible shell for the editor dialogs: labelled dialog semantics, Escape closes,
+// first field focused on open, focus restored on close. Click-outside still closes.
+function EditorShell({
+  title,
+  wide = false,
+  onClose,
+  children,
+}: {
+  title: string;
+  wide?: boolean;
+  onClose: () => void;
+  children: ReactNode;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const titleId = useId();
+
+  useEffect(() => {
+    const previous = document.activeElement as HTMLElement | null;
+    ref.current?.querySelector<HTMLElement>("input, select, textarea")?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      previous?.focus?.();
+    };
+  }, [onClose]);
+
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" onClick={onClose}>
+      <div
+        ref={ref}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        className={cn(
+          "max-h-[90vh] w-full space-y-3 overflow-y-auto rounded-xl border border-border bg-card p-5",
+          wide ? "max-w-2xl" : "max-w-lg",
+        )}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h3 id={titleId} className="font-display text-lg font-semibold text-brand-dark">
+          {title}
+        </h3>
+        {children}
+      </div>
+    </div>
+  );
+}
+
 export default function Website() {
   const { role } = useAuth();
   const isAdmin = role === "admin";
   const [tab, setTab] = useState<TabKey>("changelog");
+
+  const onTablistKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+    e.preventDefault();
+    const idx = TABS.findIndex((t) => t.key === tab);
+    const next = TABS[(idx + (e.key === "ArrowRight" ? 1 : TABS.length - 1)) % TABS.length];
+    setTab(next.key);
+    (e.currentTarget.querySelector(`#tab-${next.key}`) as HTMLElement | null)?.focus();
+  };
 
   return (
     <div>
@@ -70,13 +130,21 @@ export default function Website() {
         title="Website"
         subtitle="Content on itrova's marketing site. Only published rows are visible to the public."
       />
-      <div className="mb-6 flex flex-wrap gap-1 border-b border-border/60">
+      <div
+        role="tablist"
+        aria-label="Website content sections"
+        onKeyDown={onTablistKeyDown}
+        className="mb-6 flex flex-wrap gap-1 border-b border-border/60"
+      >
         {TABS.map((t) => (
           <button
             key={t.key}
+            id={`tab-${t.key}`}
             type="button"
             role="tab"
             aria-selected={tab === t.key}
+            aria-controls={`panel-${t.key}`}
+            tabIndex={tab === t.key ? 0 : -1}
             onClick={() => setTab(t.key)}
             className={cn(
               "-mb-px border-b-2 px-3 py-2 text-sm font-medium transition-colors",
@@ -89,10 +157,12 @@ export default function Website() {
           </button>
         ))}
       </div>
-      {tab === "changelog" && <ChangelogTab isAdmin={isAdmin} />}
-      {tab === "posts" && <PostsTab isAdmin={isAdmin} />}
-      {tab === "testimonials" && <TestimonialsTab isAdmin={isAdmin} />}
-      {tab === "copy" && <CopyTab isAdmin={isAdmin} />}
+      <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`}>
+        {tab === "changelog" && <ChangelogTab isAdmin={isAdmin} />}
+        {tab === "posts" && <PostsTab isAdmin={isAdmin} />}
+        {tab === "testimonials" && <TestimonialsTab isAdmin={isAdmin} />}
+        {tab === "copy" && <CopyTab isAdmin={isAdmin} />}
+      </div>
     </div>
   );
 }
@@ -105,7 +175,10 @@ function ChangelogTab({ isAdmin }: { isAdmin: boolean }) {
   const [removing, setRemoving] = useState<ChangelogEntry | null>(null);
 
   const reload = useCallback(() => {
-    listChangelog().then(setRows).catch((e) => toast.error(msg(e)));
+    listChangelog().then(setRows).catch((e) => {
+      setRows([]);
+      toast.error(msg(e));
+    });
   }, []);
   useEffect(reload, [reload]);
 
@@ -251,14 +324,7 @@ function ChangelogDialog({
   };
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" onClick={onClose}>
-      <div
-        className="max-h-[90vh] w-full max-w-lg space-y-3 overflow-y-auto rounded-xl border border-border bg-card p-5"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h3 className="font-display text-lg font-semibold text-brand-dark">
-          {entry ? "Edit entry" : "New What's-new entry"}
-        </h3>
+    <EditorShell title={entry ? "Edit entry" : "New What's-new entry"} onClose={onClose}>
         <label className="block text-xs text-muted-foreground">
           Display date (e.g. 2 September 2026)
           <Input value={entryDate} onChange={(e) => setEntryDate(e.target.value)} />
@@ -305,8 +371,7 @@ function ChangelogDialog({
             {busy ? "Saving…" : "Save"}
           </Button>
         </div>
-      </div>
-    </div>
+    </EditorShell>
   );
 }
 
@@ -318,7 +383,10 @@ function PostsTab({ isAdmin }: { isAdmin: boolean }) {
   const [removing, setRemoving] = useState<CmsPost | null>(null);
 
   const reload = useCallback(() => {
-    listPosts().then(setRows).catch((e) => toast.error(msg(e)));
+    listPosts().then(setRows).catch((e) => {
+      setRows([]);
+      toast.error(msg(e));
+    });
   }, []);
   useEffect(reload, [reload]);
 
@@ -488,14 +556,7 @@ function PostDialog({
   };
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" onClick={onClose}>
-      <div
-        className="max-h-[90vh] w-full max-w-2xl space-y-3 overflow-y-auto rounded-xl border border-border bg-card p-5"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h3 className="font-display text-lg font-semibold text-brand-dark">
-          {post ? "Edit post" : "New blog post"}
-        </h3>
+    <EditorShell wide title={post ? "Edit post" : "New blog post"} onClose={onClose}>
         <label className="block text-xs text-muted-foreground">
           Title
           <Input value={title} onChange={(e) => onTitle(e.target.value)} />
@@ -536,7 +597,11 @@ function PostDialog({
               type="file"
               accept="image/*"
               className="hidden"
-              onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                e.target.value = "";
+                if (file) upload(file);
+              }}
             />
             <span className="inline-flex h-10 items-center gap-2 rounded-md border border-input px-3 text-sm">
               <Upload className="size-4" /> {uploading ? "Uploading…" : "Upload"}
@@ -565,8 +630,7 @@ function PostDialog({
             {busy ? "Saving…" : "Save"}
           </Button>
         </div>
-      </div>
-    </div>
+    </EditorShell>
   );
 }
 
@@ -578,7 +642,10 @@ function TestimonialsTab({ isAdmin }: { isAdmin: boolean }) {
   const [removing, setRemoving] = useState<CmsTestimonial | null>(null);
 
   const reload = useCallback(() => {
-    listTestimonials().then(setRows).catch((e) => toast.error(msg(e)));
+    listTestimonials().then(setRows).catch((e) => {
+      setRows([]);
+      toast.error(msg(e));
+    });
   }, []);
   useEffect(reload, [reload]);
 
@@ -716,14 +783,7 @@ function TestimonialDialog({
   };
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" onClick={onClose}>
-      <div
-        className="w-full max-w-lg space-y-3 rounded-xl border border-border bg-card p-5"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h3 className="font-display text-lg font-semibold text-brand-dark">
-          {t ? "Edit testimonial" : "New testimonial"}
-        </h3>
+    <EditorShell title={t ? "Edit testimonial" : "New testimonial"} onClose={onClose}>
         <label className="block text-xs text-muted-foreground">
           Name
           <Input value={name} onChange={(e) => setName(e.target.value)} />
@@ -758,8 +818,7 @@ function TestimonialDialog({
             {busy ? "Saving…" : "Save"}
           </Button>
         </div>
-      </div>
-    </div>
+    </EditorShell>
   );
 }
 
@@ -771,7 +830,10 @@ function CopyTab({ isAdmin }: { isAdmin: boolean }) {
   const [removingKey, setRemovingKey] = useState<string | null>(null);
 
   const reload = useCallback(() => {
-    listCopy().then(setRows).catch((e) => toast.error(msg(e)));
+    listCopy().then(setRows).catch((e) => {
+      setRows([]);
+      toast.error(msg(e));
+    });
   }, []);
   useEffect(reload, [reload]);
 
@@ -801,6 +863,7 @@ function CopyTab({ isAdmin }: { isAdmin: boolean }) {
               <TableRow>
                 <TableHead>Key</TableHead>
                 <TableHead>Value</TableHead>
+                <TableHead>Status</TableHead>
                 <TableHead>Updated</TableHead>
                 <TableHead />
               </TableRow>
@@ -811,6 +874,9 @@ function CopyTab({ isAdmin }: { isAdmin: boolean }) {
                   <TableCell className="font-mono text-sm font-medium">{r.key}</TableCell>
                   <TableCell className="max-w-md truncate font-mono text-xs text-muted-foreground">
                     {JSON.stringify(r.value)}
+                  </TableCell>
+                  <TableCell>
+                    <PublishedPill on={r.published} />
                   </TableCell>
                   <TableCell className="whitespace-nowrap text-muted-foreground">
                     {formatDate(r.updatedAt)}
@@ -878,6 +944,7 @@ function CopyDialog({
 }) {
   const [key, setKey] = useState(entry?.key ?? "");
   const [value, setValue] = useState(JSON.stringify(entry?.value ?? {}, null, 2));
+  const [published, setPublished] = useState(entry?.published ?? false);
   const [busy, setBusy] = useState(false);
 
   const confirm = async () => {
@@ -890,7 +957,7 @@ function CopyDialog({
     }
     setBusy(true);
     try {
-      await saveCopy(key.trim(), parsed);
+      await saveCopy(key.trim(), parsed, published);
       toast.success("Copy saved");
       onDone();
     } catch (e) {
@@ -901,14 +968,7 @@ function CopyDialog({
   };
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" onClick={onClose}>
-      <div
-        className="max-h-[90vh] w-full max-w-lg space-y-3 overflow-y-auto rounded-xl border border-border bg-card p-5"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h3 className="font-display text-lg font-semibold text-brand-dark">
-          {entry ? `Edit "${entry.key}"` : "New copy key"}
-        </h3>
+    <EditorShell title={entry ? `Edit "${entry.key}"` : "New copy key"} onClose={onClose}>
         <label className="block text-xs text-muted-foreground">
           Key
           <Input value={key} onChange={(e) => setKey(e.target.value)} disabled={!!entry} />
@@ -921,6 +981,10 @@ function CopyDialog({
             onChange={(e) => setValue(e.target.value)}
           />
         </label>
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={published} onChange={(e) => setPublished(e.target.checked)} />
+          Published (visible to the site)
+        </label>
         <div className="flex justify-end gap-2 pt-1">
           <Button variant="ghost" size="sm" onClick={onClose}>
             Cancel
@@ -929,7 +993,6 @@ function CopyDialog({
             {busy ? "Saving…" : "Save"}
           </Button>
         </div>
-      </div>
-    </div>
+    </EditorShell>
   );
 }
