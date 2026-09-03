@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type KeyboardEvent } from "react";
 import { PageHeader } from "@/components/PageHeader";
 import { CollectionConfig, CollectionTab } from "@/components/cms/CollectionTab";
 import { useAuth } from "@/contexts/AuthContext";
@@ -130,10 +130,25 @@ export default function Allspire() {
   const [tab, setTab] = useState<string>(COLLECTIONS[0].table);
   const current = COLLECTIONS.find((c) => c.table === tab) ?? COLLECTIONS[0];
 
+  // Roving focus per the ARIA tabs pattern: arrows, Home and End move between tabs and select them.
+  const onTabKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    const idx = COLLECTIONS.findIndex((c) => c.table === tab);
+    let next = idx;
+    if (e.key === "ArrowRight") next = (idx + 1) % COLLECTIONS.length;
+    else if (e.key === "ArrowLeft") next = (idx - 1 + COLLECTIONS.length) % COLLECTIONS.length;
+    else if (e.key === "Home") next = 0;
+    else if (e.key === "End") next = COLLECTIONS.length - 1;
+    else return;
+    e.preventDefault();
+    const table = COLLECTIONS[next].table;
+    setTab(table);
+    document.getElementById(`as-tab-${table}`)?.focus();
+  };
+
   return (
     <div>
       <PageHeader title="Allspire website" subtitle="Proof and copy on allspire.tech. Only published rows are visible to the public." />
-      <div role="tablist" aria-label="Allspire content sections" className="mb-6 flex flex-wrap gap-1 border-b border-border/60">
+      <div role="tablist" aria-label="Allspire content sections" onKeyDown={onTabKeyDown} className="mb-6 flex flex-wrap gap-1 border-b border-border/60">
         {COLLECTIONS.map((c) => (
           <button
             key={c.table}

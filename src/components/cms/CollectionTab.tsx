@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Plus, Upload } from "lucide-react";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
@@ -196,6 +196,9 @@ function RowForm({
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState<string | null>(null);
+  const fileInputs = useRef<Record<string, HTMLInputElement | null>>({});
+  // The key the row was loaded with: updates filter on it even if the user edits the key itself.
+  const originalKey = row[pk];
 
   const set = (key: string, v: unknown) => {
     setTouched((t) => ({ ...t, [key]: true }));
@@ -236,7 +239,7 @@ function RowForm({
     }
     setBusy(true);
     try {
-      await saveRow(config.table, out, pk);
+      await saveRow(config.table, out, pk, originalKey);
       toast.success("Saved");
       onSaved();
     } catch (e) {
@@ -290,12 +293,27 @@ function RowForm({
               <Input disabled={disabled} value={String(v ?? "")} onChange={(e) => set(f.key, e.target.value)} />
             </label>
             {!disabled && (
-              <label className="inline-flex cursor-pointer items-center">
-                <input type="file" accept="image/*" className="hidden" onChange={(e) => { const file = e.target.files?.[0]; e.target.value = ""; if (file) upload(f, file); }} />
-                <span className="inline-flex h-10 items-center gap-2 rounded-md border border-input px-3 text-sm">
+              <>
+                <input
+                  ref={(el) => { fileInputs.current[f.key] = el; }}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  tabIndex={-1}
+                  aria-hidden="true"
+                  onChange={(e) => { const file = e.target.files?.[0]; e.target.value = ""; if (file) upload(f, file); }}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-10"
+                  disabled={uploading !== null}
+                  aria-label={`Upload ${f.label.toLowerCase()}`}
+                  onClick={() => fileInputs.current[f.key]?.click()}
+                >
                   <Upload className="size-4" /> {uploading === f.key ? "Uploading…" : "Upload"}
-                </span>
-              </label>
+                </Button>
+              </>
             )}
             {!!v && <img src={String(v)} alt="" className="h-10 w-auto rounded border border-border/60" />}
           </div>
@@ -330,7 +348,9 @@ function RowForm({
       {isAdmin && (
         <div className="flex justify-end gap-2 pt-1">
           {!inline && <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>}
-          <Button size="sm" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save"}</Button>
+          <Button size="sm" onClick={save} disabled={busy || uploading !== null}>
+            {busy ? "Saving…" : uploading ? "Uploading…" : "Save"}
+          </Button>
         </div>
       )}
     </div>

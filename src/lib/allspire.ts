@@ -26,14 +26,21 @@ export async function listRows(table: AsTable, orderBy: string[] = ["sort", "cre
   return (data ?? []) as Row[];
 }
 
-/** Insert when there is no primary key value yet, otherwise update by that key. */
-export async function saveRow(table: AsTable, row: Row, pk: string = "id"): Promise<void> {
-  const key = row[pk];
+/**
+ * Insert when the row was not loaded with a primary key, otherwise update the row it was loaded
+ * as (originalKey), so editing the key itself renames instead of silently updating zero rows.
+ */
+export async function saveRow(table: AsTable, row: Row, pk: string = "id", originalKey?: unknown): Promise<void> {
   const body = { ...row };
-  if (key == null || key === "") delete body[pk];
-  const q = key == null || key === "" ? sb.from(table).insert(body) : sb.from(table).update(body).eq(pk, key);
-  const { error } = await q;
+  if (originalKey == null || originalKey === "") {
+    if (body[pk] == null || body[pk] === "") delete body[pk];
+    const { error } = await sb.from(table).insert(body);
+    if (error) throw error;
+    return;
+  }
+  const { data, error } = await sb.from(table).update(body).eq(pk, originalKey).select(pk);
   if (error) throw error;
+  if (!data || data.length === 0) throw new Error("Nothing was saved. The row may have been deleted; reload and try again.");
 }
 
 export async function deleteRow(table: AsTable, key: unknown, pk: string = "id"): Promise<void> {
