@@ -20,6 +20,7 @@ import {
   PanelLeftOpen,
   Menu,
   X,
+  Layers,
 } from "lucide-react";
 
 const nav = [
@@ -32,6 +33,7 @@ const nav = [
   { to: "/referrals", label: "Referrals", icon: Gift },
   { to: "/marketing", label: "Marketing", icon: Megaphone },
   { to: "/website", label: "Website", icon: Globe },
+  { to: "/allspire", label: "Allspire", icon: Layers },
   { to: "/tasks", label: "Tasks", icon: ListChecks },
   { to: "/settings", label: "Settings", icon: Settings },
 ];
