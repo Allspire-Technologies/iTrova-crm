@@ -3,6 +3,23 @@
 Notable changes to the iTrova CRM (Admin OS). The format follows
 [Keep a Changelog](https://keepachangelog.com/); entries are grouped by ship date, newest first.
 
+## 2026-09-03 — Allspire website console
+
+### Added
+
+- New **Allspire** page (staff nav) for the content allspire.tech renders: client logos, stats, case
+  studies (markdown story, cover image), testimonials, team members, keyed page copy and the single
+  webinar record. Every collection has a draft/published toggle; the site reads published rows only
+  and hides each section until something is published. Admin-only writes; other staff can view.
+- One schema-driven editor (`CollectionTab`) powers all seven tabs, with image upload to
+  `cms-media/allspire/`, an em-dash guard on text fields and a typed confirmation before delete.
+
+### Notes
+
+- Migration `20260903110000_allspire_cms.sql` adds the `as_*` tables (separate from iTrova's
+  `cms_*`), RLS (public read of published rows, admin write) and seeds the webinar record from the
+  programme that is live today. Apply to staging, then production.
+
 ## 2026-09-02 — Affiliate applications: outcome emails, delivery status, delete
 
 ### Added

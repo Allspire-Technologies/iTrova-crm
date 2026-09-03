@@ -16,6 +16,7 @@ import RenewalDetail from "@/pages/RenewalDetail";
 import Messages from "@/pages/Messages";
 import Marketing from "@/pages/Marketing";
 import Website from "@/pages/Website";
+import Allspire from "@/pages/Allspire";
 import Tasks from "@/pages/Tasks";
 import Settings from "@/pages/Settings";
 import NotFound from "@/pages/NotFound";
@@ -49,6 +50,7 @@ export default function App() {
             <Route path="/referrals" element={<Referrals />} />
             <Route path="/marketing" element={<Marketing />} />
             <Route path="/website" element={<Website />} />
+            <Route path="/allspire" element={<Allspire />} />
             <Route path="/tasks" element={<Tasks />} />
             <Route path="/settings" element={<Settings />} />
           </Route>
