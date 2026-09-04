@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { optimizeImage } from "@/lib/imageOptimize";
 
 // Allspire website CMS (as_* tables, migration 20260903110000). Generic row CRUD: the console's
 // CollectionTab is schema-driven, so every collection goes through the same four calls.
@@ -57,10 +58,15 @@ const MEDIA_EXT: Record<string, string> = {
   "image/svg+xml": "svg",
 };
 
-/** Upload to the shared cms-media bucket under allspire/<folder>/; returns the public URL. */
-export async function uploadAllspireMedia(file: File, folder: string): Promise<string> {
+/**
+ * Upload to the shared cms-media bucket under allspire/<folder>/; returns the public URL.
+ * Raster images are downscaled to 1600px and re-encoded as WebP first (see imageOptimize.ts);
+ * SVGs pass through untouched.
+ */
+export async function uploadAllspireMedia(input: File, folder: string): Promise<string> {
+  if (!MEDIA_EXT[input.type]) throw new Error("Use a PNG, JPEG, WebP, AVIF or SVG image.");
+  const { file } = await optimizeImage(input);
   const ext = MEDIA_EXT[file.type];
-  if (!ext) throw new Error("Use a PNG, JPEG, WebP, AVIF or SVG image.");
   if (file.size > MAX_MEDIA_BYTES) throw new Error("Image is over 5 MB. Resize it and try again.");
   const path = `allspire/${folder}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
   const { error } = await supabase.storage.from("cms-media").upload(path, file, { cacheControl: "31536000", upsert: false });
