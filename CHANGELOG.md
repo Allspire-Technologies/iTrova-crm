@@ -3,6 +3,15 @@
 Notable changes to the iTrova CRM (Admin OS). The format follows
 [Keep a Changelog](https://keepachangelog.com/); entries are grouped by ship date, newest first.
 
+## 2026-09-04: CMS images optimised on upload
+
+### Changed
+
+- **Website and Allspire consoles.** Every raster image uploaded (blog covers, client logos, case-study covers,
+  team and testimonial photos, facilitator photo) is downscaled to 1600px and re-encoded as WebP in the
+  browser before it reaches storage. A 313 kB PNG cover becomes about 46 kB. SVGs pass through; an image
+  that would not get smaller is kept as uploaded.
+
 ## 2026-09-03 — Allspire website console
 
 ### Added

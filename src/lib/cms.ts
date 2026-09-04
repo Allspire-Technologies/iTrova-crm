@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { optimizeImage } from "@/lib/imageOptimize";
 
 // Website CMS content (cms_* tables, migration 20260902100000). Authored here in the CRM,
 // read by the itrova marketing website (published rows only; RLS enforces). The cms_* tables
@@ -348,9 +349,11 @@ const MEDIA_EXT: Record<string, string> = {
 
 /** Upload a blog cover to the public cms-media bucket; returns the public URL.
  *  Type/size are checked here AND enforced on the bucket itself (see the cms migration). */
-export async function uploadCmsMedia(file: File): Promise<string> {
+export async function uploadCmsMedia(input: File): Promise<string> {
+  if (!MEDIA_EXT[input.type]) throw new Error("Use a PNG, JPEG, WebP or AVIF image.");
+  // Downscaled to 1600px and re-encoded as WebP on the way in (see imageOptimize.ts).
+  const { file } = await optimizeImage(input);
   const ext = MEDIA_EXT[file.type];
-  if (!ext) throw new Error("Use a PNG, JPEG, WebP or AVIF image.");
   if (file.size > MAX_MEDIA_BYTES) throw new Error("Image is over 5 MB. Resize it and try again.");
   const path = `covers/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
   const { error } = await supabase.storage.from("cms-media").upload(path, file, {
