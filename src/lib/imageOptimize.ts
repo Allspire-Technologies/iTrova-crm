@@ -70,8 +70,8 @@ export async function optimizeImage(file: File, maxWidth = OPTIMIZE_MAX_WIDTH, q
   if ("close" in src) src.close();
   const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/webp", quality));
   // Keep the original when the browser cannot encode WebP or the result is not actually smaller
-  // (already-optimised WebP/AVIF at or below the target width).
-  if (!blob || blob.type !== "image/webp" || (scale === 1 && blob.size >= file.size)) return passthrough(w, h);
+  // (an already well-compressed WebP/AVIF can come back larger even after downscaling).
+  if (!blob || blob.type !== "image/webp" || blob.size >= file.size) return passthrough(w, h);
   const name = file.name.replace(/\.[a-z0-9]+$/i, "") + ".webp";
   return { file: new File([blob], name, { type: "image/webp" }), converted: true, width, height };
 }
