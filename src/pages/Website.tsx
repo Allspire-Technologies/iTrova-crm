@@ -38,6 +38,7 @@ import {
 } from "@/lib/cms";
 import { formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { CollectionConfig, CollectionTab } from "@/components/cms/CollectionTab";
 
 // Website content console: what the itrova marketing site renders (published rows only).
 // Guide-section editing ships in a follow-up; the table exists, the site falls back to its
@@ -48,9 +49,27 @@ const TABS = [
   { key: "posts", label: "Blog" },
   { key: "guide", label: "Guide" },
   { key: "testimonials", label: "Testimonials" },
+  { key: "stats", label: "Stats" },
   { key: "copy", label: "Page copy" },
 ] as const;
 type TabKey = (typeof TABS)[number]["key"];
+
+// Home-page figures. Real numbers only: the site hides the strip until one is published and shows
+// at most four, in sort order.
+const STATS_CONFIG: CollectionConfig = {
+  table: "cms_stat",
+  title: "Stats",
+  blurb: "Figures for the strip under the home-page hero. Only real numbers. The strip is hidden until one is published and shows up to four.",
+  columns: ["value", "label", "sort", "published"],
+  orderBy: ["sort"],
+  rowLabel: (r) => `${String(r.value)} ${String(r.label)}`,
+  fields: [
+    { key: "value", label: "Value", type: "text", required: true, hint: "e.g. 120 or ₦4m" },
+    { key: "label", label: "Label", type: "text", required: true, hint: "e.g. Businesses on iTrova" },
+    { key: "sort", label: "Sort", type: "number" },
+    { key: "published", label: "Published", type: "boolean" },
+  ],
+};
 
 const msg = (e: unknown) => (e instanceof Error ? e.message : "Something went wrong");
 
@@ -194,6 +213,7 @@ export default function Website() {
         {tab === "posts" && <PostsTab isAdmin={isAdmin} />}
         {tab === "guide" && <GuideTab isAdmin={isAdmin} />}
         {tab === "testimonials" && <TestimonialsTab isAdmin={isAdmin} />}
+        {tab === "stats" && <CollectionTab config={STATS_CONFIG} isAdmin={isAdmin} />}
         {tab === "copy" && <CopyTab isAdmin={isAdmin} />}
       </div>
     </div>
