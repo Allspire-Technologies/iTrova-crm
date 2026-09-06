@@ -16,6 +16,8 @@ export const AS_TABLES = [
   "as_team_member",
   "as_copy",
   "as_webinar",
+  // iTrova website statistics (cms_stat) reuse the same generic editor.
+  "cms_stat",
 ] as const;
 export type AsTable = (typeof AS_TABLES)[number];
 
