@@ -1,6 +1,6 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { ArrowLeft, Building2, Clock, Trash2, Users } from "lucide-react";
+import { ArrowLeft, Building2, Clock, MailCheck, Trash2, Users } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/PageHeader";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
@@ -25,7 +25,8 @@ import { getCurrentHealth, listHealthHistory } from "@/lib/health";
 import { pipeline } from "@/lib/cs";
 import type { CsPipeline, HealthBand, PipelineStage } from "@/lib/cs";
 import { useAuth } from "@/contexts/AuthContext";
-import { roleSeesRevenue, roleCanManagePlans } from "@/lib/roles";
+import { activationState, resendActivationEmail } from "@/lib/activation";
+import { roleSeesRevenue, roleCanManagePlans, roleCanMessageCustomers } from "@/lib/roles";
 import { formatDate, formatMoney, formatRelative } from "@/lib/format";
 
 const CrmTabs = lazy(() => import("@/components/customer/CrmTabs"));
@@ -63,9 +64,14 @@ export default function CustomerDetail() {
   const seesRevenue = roleSeesRevenue(role); // subscription amount / revenue are admin-only (§3)
   const canDelete = role === "admin"; // deleting a business is Management/Admin-only
   const canManagePlans = roleCanManagePlans(role); // dual-control plan change is Management/Admin-only
+  const canResendActivation = roleCanMessageCustomers(role); // same gate as emailing a customer
   const [data, setData] = useState<Detail | null | undefined>(undefined);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [confirmingResend, setConfirmingResend] = useState(false);
+  const [resending, setResending] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
+  const resendKey = useRef<string | null>(null);
   const [health, setHealth] = useState<Health>(null);
   const [stage, setStage] = useState<CsPipeline | null>(null);
   const [scores, setScores] = useState<number[]>([]);
@@ -98,6 +104,30 @@ export default function CustomerDetail() {
       cancelled = true;
     };
   }, [id, reloadKey]);
+
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const t = setTimeout(() => setResendCooldown((s) => s - 1), 1000);
+    return () => clearTimeout(t);
+  }, [resendCooldown]);
+
+  async function confirmResend() {
+    if (!id) return;
+    // One key per attempt-series: a retry after a timeout replays the same send instead of doubling it.
+    resendKey.current ??= crypto.randomUUID();
+    setResending(true);
+    try {
+      const to = await resendActivationEmail(id, resendKey.current);
+      resendKey.current = null;
+      setConfirmingResend(false);
+      setResendCooldown(60);
+      toast.success(`Activation email sent to ${to || data?.ownerEmail || "the owner"}.`);
+    } catch (e) {
+      toast.error((e as { message?: string })?.message ?? "Couldn't send the activation email.");
+    } finally {
+      setResending(false);
+    }
+  }
 
   async function confirmDelete() {
     if (!id) return;
@@ -147,6 +177,13 @@ export default function CustomerDetail() {
 
   const sub = data.subscription;
   const owner = data.team.find((m) => m.isOwner);
+  const activation = activationState(data.ownerEmail, data.ownerEmailConfirmedAt);
+  const resendHint =
+    activation.kind === "activated" ? `Activated on ${formatDate(activation.at)}`
+    : activation.kind === "no_email" ? "This business has no owner email on file."
+    : resendCooldown > 0 ? `Sent. You can send again in ${resendCooldown}s.`
+    : "Email the owner a fresh activation link.";
+  const resendDisabled = activation.kind !== "pending" || resendCooldown > 0;
 
   return (
     <>
@@ -156,6 +193,13 @@ export default function CustomerDetail() {
         action={
           <div className="flex flex-wrap items-center gap-2">
             {back}
+            {canResendActivation && (
+              <span title={resendHint} className="inline-flex">
+                <Button variant="outline" size="sm" disabled={resendDisabled} onClick={() => setConfirmingResend(true)}>
+                  <MailCheck className="size-4" /> Resend activation email
+                </Button>
+              </span>
+            )}
             {canDelete && (
               <Button
                 variant="outline"
@@ -168,6 +212,16 @@ export default function CustomerDetail() {
             )}
           </div>
         }
+      />
+
+      <ConfirmDialog
+        open={confirmingResend}
+        onOpenChange={(o) => { if (!o && !resending) setConfirmingResend(false); }}
+        title="Resend activation email?"
+        description={<>A fresh activation link will be emailed to <span className="font-medium text-brand-dark">{data.ownerEmail}</span>. Opening it signs the owner in and marks the email as activated.</>}
+        confirmLabel="Send activation email"
+        busy={resending}
+        onConfirm={confirmResend}
       />
 
       <ConfirmDialog
@@ -197,7 +251,13 @@ export default function CustomerDetail() {
               <Field label="Business">{data.name}</Field>
               <Field label="Owner">{owner?.name ?? "—"}</Field>
               <Field label="Phone">{owner?.phone ?? data.whatsappNumber ?? "—"}</Field>
-              <Field label="Email">{data.ownerEmail ?? "—"}</Field>
+              <Field label="Email">
+                <span className="inline-flex flex-wrap items-center gap-2">
+                  {data.ownerEmail ?? "—"}
+                  {activation.kind === "activated" && <Badge variant="secondary">Activated</Badge>}
+                  {activation.kind === "pending" && <Badge variant="outline">Not activated</Badge>}
+                </span>
+              </Field>
               <Field label="Industry">{data.industry ?? "—"}</Field>
               <Field label="Referred by">{data.referredByCode ?? "—"}</Field>
               <Field label="Referral code">{data.referralCode ?? "—"}</Field>

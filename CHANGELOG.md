@@ -3,6 +3,17 @@
 Notable changes to the iTrova CRM (Admin OS). The format follows
 [Keep a Changelog](https://keepachangelog.com/); entries are grouped by ship date, newest first.
 
+## 2026-09-08: Resend activation email from Customer detail
+
+### Added
+
+- **Resend activation email.** Customer detail has a header action that emails the business owner a
+  fresh activation link while their account is still unactivated. It greys out once the owner has
+  activated (hover shows the date), sits behind the same gate as customer emails (Management/Admin,
+  or Support assigned to the business), waits a minute between sends, and every send lands in the
+  customer's message history without the link itself. The Email field now shows an Activated or
+  Not activated badge.
+
 ## 2026-09-04: CMS images optimised on upload
 
 ### Changed

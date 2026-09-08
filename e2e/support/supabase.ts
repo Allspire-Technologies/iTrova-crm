@@ -113,7 +113,7 @@ const HEALTH = {
 };
 
 // Customer Detail (§7.4) fixtures.
-const PROFILE_EXTRA = { industry: "Food & Beverage", owner_email: "ada@mamaput.example" };
+const PROFILE_EXTRA = { industry: "Food & Beverage", owner_email: "ada@mamaput.example", owner_email_confirmed_at: null as string | null };
 const USAGE = {
   products_total: 12, products_30d: 3, products_90d: 7,
   sales_total: 20, sales_30d: 5, sales_90d: 14,
@@ -301,6 +301,12 @@ export const EMAIL_TEMPLATES = [
   { key: "welcome", name: "Welcome / onboarding", subject: "Welcome to iTrova, {{business_name}}", body: "<p>Hi {{owner_name}},</p><p>Welcome to {{plan}}.</p>" },
   { key: "renewal_reminder", name: "Renewal reminder", subject: "Your iTrova plan renews on {{renewal_date}}", body: "<p>Hi {{owner_name}},</p><p>{{business_name}} renews soon.</p>" },
 ];
+/** Owner activation (Customer detail header). Register AFTER stubCustomers so the profile override wins. */
+export async function stubActivation(page: Page, opts: { confirmedAt?: string | null } = {}) {
+  await page.route("**/rest/v1/rpc/admin_business_profile**", (r) => json(r, [{ ...PROFILE_EXTRA, owner_email_confirmed_at: opts.confirmedAt ?? null }]));
+  await page.route("**/functions/v1/resend-activation-email**", (r) => json(r, { ok: true, to_email: PROFILE_EXTRA.owner_email }));
+}
+
 export async function stubMessaging(page: Page, opts: { history?: unknown[] } = {}) {
   await page.route("**/rest/v1/cs_email_template**", (r) => json(r, EMAIL_TEMPLATES));
   // History comes from the cs_customer_messages RPC (resolves the sender name server-side).

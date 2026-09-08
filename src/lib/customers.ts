@@ -166,6 +166,7 @@ export type CustomerDetail = {
   planKey: string | null;
   industry: string | null;
   ownerEmail: string | null;
+  ownerEmailConfirmedAt: string | null;
   referredByCode: string | null;
   referralCode: string | null;
   timezone: string | null;
@@ -187,7 +188,7 @@ export async function getCustomer(id: string): Promise<CustomerDetail | null> {
       .select("id, owner_name, phone, last_seen")
       .eq("business_id", id)
       .order("created_at", { ascending: true }),
-    getBusinessProfileExtra(id).catch(() => ({ industry: null, ownerEmail: null, referredByCode: null, referralCode: null })),
+    getBusinessProfileExtra(id).catch(() => ({ industry: null, ownerEmail: null, referredByCode: null, referralCode: null, ownerEmailConfirmedAt: null })),
   ]);
   if (error) throw error;
 
@@ -198,6 +199,7 @@ export async function getCustomer(id: string): Promise<CustomerDetail | null> {
     planKey: agg.planKey,
     industry: extra.industry,
     ownerEmail: extra.ownerEmail,
+    ownerEmailConfirmedAt: extra.ownerEmailConfirmedAt,
     referredByCode: extra.referredByCode,
     referralCode: extra.referralCode,
     timezone: agg.timezone,

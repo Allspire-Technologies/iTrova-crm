@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { signIn } from "./support/auth";
-import { stubCustomers, CUSTOMER, PROFILE_EXTRA } from "./support/supabase";
+import { stubCustomers, stubActivation, CUSTOMER, PROFILE_EXTRA } from "./support/supabase";
 
 test.describe("Customer Detail (§7.4)", () => {
   test("renders the profile, health reasons, pipeline and all sections", async ({ page }) => {
@@ -84,5 +84,46 @@ test.describe("Customer Detail (§7.4)", () => {
     );
     await page.getByRole("button", { name: "Add note" }).click();
     await post;
+  });
+  test("admin resends the activation email while the owner is not activated", async ({ page }) => {
+    await signIn(page, { staff: true });
+    await stubCustomers(page);
+    await stubActivation(page, { confirmedAt: null });
+    await page.goto(`/customers/${CUSTOMER.id}`);
+
+    await expect(page.getByText("Not activated")).toBeVisible();
+    const button = page.getByRole("button", { name: "Resend activation email" });
+    await expect(button).toBeEnabled();
+    const send = page.waitForRequest(
+      (r) => r.url().includes("/functions/v1/resend-activation-email") && r.method() === "POST",
+    );
+    await button.click();
+    await page.getByRole("button", { name: "Send activation email", exact: true }).click();
+    const req = await send;
+    // The browser never chooses the recipient — the function resolves the owner server-side.
+    expect(req.postData() ?? "").toContain(CUSTOMER.id);
+    expect(req.postData() ?? "").not.toContain(PROFILE_EXTRA.owner_email);
+    await expect(page.getByText(/Activation email sent to/)).toBeVisible();
+    await expect(button).toBeDisabled(); // one send per minute
+  });
+
+  test("the resend action is greyed out once the owner has activated", async ({ page }) => {
+    await signIn(page, { staff: true });
+    await stubCustomers(page);
+    await stubActivation(page, { confirmedAt: "2026-02-01T09:00:00Z" });
+    await page.goto(`/customers/${CUSTOMER.id}`);
+
+    await expect(page.getByText("Activated", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Resend activation email" })).toBeDisabled();
+  });
+
+  test("a CSO does not get the resend action", async ({ page }) => {
+    await signIn(page, { staff: true, role: "cso" });
+    await stubCustomers(page);
+    await stubActivation(page);
+    await page.goto(`/customers/${CUSTOMER.id}`);
+
+    await expect(page.getByText("Not activated")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Resend activation email" })).toHaveCount(0);
   });
 });
