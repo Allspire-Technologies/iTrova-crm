@@ -40,6 +40,13 @@ Deno.serve(async (req) => {
     const replyTo = Deno.env.get("EMAIL_REPLY_TO");
     const appUrl = (Deno.env.get("ITROVA_APP_URL") ?? DEFAULT_APP_URL).replace(/\/+$/, "");
     if (!resendKey || !fromEmail) return json({ error: "Email is not configured (missing RESEND_API_KEY / EMAIL_FROM_ADDRESS)." }, 500);
+    // The link carries a sign-in token, so the landing page must be https; plain http only for a local dev app.
+    let appOrigin: URL;
+    try { appOrigin = new URL(appUrl); } catch { return json({ error: "ITROVA_APP_URL is not a valid URL." }, 500); }
+    const localDev = appOrigin.hostname === "localhost" || appOrigin.hostname === "127.0.0.1";
+    if (appOrigin.protocol !== "https:" && !(appOrigin.protocol === "http:" && localDev)) {
+      return json({ error: "ITROVA_APP_URL must be an https URL." }, 500);
+    }
 
     // 1) Caller must be admin or support; support only for businesses assigned to them.
     const caller = createClient(url, anon, { global: { headers: { Authorization: req.headers.get("Authorization") ?? "" } } });

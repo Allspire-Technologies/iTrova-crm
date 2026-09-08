@@ -6,9 +6,12 @@ import { supabase } from "@/integrations/supabase/client";
 export type ActivationState =
   | { kind: "activated"; at: string }
   | { kind: "pending" }
-  | { kind: "no_email" };
+  | { kind: "no_email" }
+  | { kind: "unknown" };
 
-export function activationState(ownerEmail: string | null, confirmedAt: string | null): ActivationState {
+/** A failed profile lookup is "unknown", never "no email": the page must not claim a state it didn't read. */
+export function activationState(ownerEmail: string | null, confirmedAt: string | null, unavailable = false): ActivationState {
+  if (unavailable) return { kind: "unknown" };
   if (!ownerEmail) return { kind: "no_email" };
   if (confirmedAt) return { kind: "activated", at: confirmedAt };
   return { kind: "pending" };

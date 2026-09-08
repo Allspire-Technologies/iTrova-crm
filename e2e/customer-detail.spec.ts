@@ -117,6 +117,18 @@ test.describe("Customer Detail (§7.4)", () => {
     await expect(page.getByRole("button", { name: "Resend activation email" })).toBeDisabled();
   });
 
+  test("a failed profile lookup shows no activation badge and disables resend", async ({ page }) => {
+    await signIn(page, { staff: true });
+    await stubCustomers(page);
+    await stubActivation(page, { fail: true });
+    await page.goto(`/customers/${CUSTOMER.id}`);
+
+    await expect(page.getByRole("heading", { name: CUSTOMER.name })).toBeVisible();
+    await expect(page.getByText("Not activated")).toHaveCount(0);
+    await expect(page.getByText("Activated", { exact: true })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Resend activation email" })).toBeDisabled();
+  });
+
   test("a CSO does not get the resend action", async ({ page }) => {
     await signIn(page, { staff: true, role: "cso" });
     await stubCustomers(page);

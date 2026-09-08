@@ -302,8 +302,9 @@ export const EMAIL_TEMPLATES = [
   { key: "renewal_reminder", name: "Renewal reminder", subject: "Your iTrova plan renews on {{renewal_date}}", body: "<p>Hi {{owner_name}},</p><p>{{business_name}} renews soon.</p>" },
 ];
 /** Owner activation (Customer detail header). Register AFTER stubCustomers so the profile override wins. */
-export async function stubActivation(page: Page, opts: { confirmedAt?: string | null } = {}) {
-  await page.route("**/rest/v1/rpc/admin_business_profile**", (r) => json(r, [{ ...PROFILE_EXTRA, owner_email_confirmed_at: opts.confirmedAt ?? null }]));
+export async function stubActivation(page: Page, opts: { confirmedAt?: string | null; fail?: boolean } = {}) {
+  await page.route("**/rest/v1/rpc/admin_business_profile**", (r) =>
+    opts.fail ? json(r, { message: "profile lookup failed" }, 500) : json(r, [{ ...PROFILE_EXTRA, owner_email_confirmed_at: opts.confirmedAt ?? null }]));
   await page.route("**/functions/v1/resend-activation-email**", (r) => json(r, { ok: true, to_email: PROFILE_EXTRA.owner_email }));
 }
 

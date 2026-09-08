@@ -177,9 +177,10 @@ export default function CustomerDetail() {
 
   const sub = data.subscription;
   const owner = data.team.find((m) => m.isOwner);
-  const activation = activationState(data.ownerEmail, data.ownerEmailConfirmedAt);
+  const activation = activationState(data.ownerEmail, data.ownerEmailConfirmedAt, data.profileUnavailable);
   const resendHint =
     activation.kind === "activated" ? `Activated on ${formatDate(activation.at)}`
+    : activation.kind === "unknown" ? "Couldn't load the activation status. Reload the page."
     : activation.kind === "no_email" ? "This business has no owner email on file."
     : resendCooldown > 0 ? `Sent. You can send again in ${resendCooldown}s.`
     : "Email the owner a fresh activation link.";
