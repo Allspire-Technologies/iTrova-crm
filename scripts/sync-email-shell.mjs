@@ -23,7 +23,9 @@ const START = "// <<< EMAIL SHELL — generated, do not edit here. Source: supab
 const END = "// >>> END EMAIL SHELL";
 
 function block() {
-  const src = fs.readFileSync(SOURCE, "utf8");
+  // Normalise to LF first: a CRLF checkout of the source would otherwise leak into LF targets
+  // (or become CRCRLF in CRLF ones) and make --check report every copy as stale.
+  const src = fs.readFileSync(SOURCE, "utf8").replace(/\r\n/g, "\n");
   // Drop the file's own header comment (everything before the first declaration) and the export
   // keyword, which has no meaning inside a single-file function.
   const body = src.slice(src.search(/^export /m)).replace(/^export /gm, "");
@@ -41,7 +43,9 @@ for (const rel of TARGETS) {
   const eol = src.includes("\r\n") ? "\r\n" : "\n";
   const want = generated.replace(/\n/g, eol);
   const s = src.indexOf(START);
-  const e = src.indexOf(END);
+  // The end marker must follow the start marker; an orphaned END earlier in the file would
+  // otherwise leave the old block in place beside a freshly inserted one.
+  const e = src.indexOf(END, s + START.length);
   if (s === -1 || e === -1) { console.error(`no shell markers in ${rel}`); process.exitCode = 1; continue; }
   const current = src.slice(s, e + END.length);
   if (current === want) { console.log(`up to date  ${rel}`); continue; }
