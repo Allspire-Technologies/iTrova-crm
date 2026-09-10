@@ -20,11 +20,136 @@ const cors = {
 };
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...cors, "Content-Type": "application/json" } });
+// <<< EMAIL SHELL — generated, do not edit here. Source: supabase/functions/_shared/email-shell.ts
+// Regenerate with: node scripts/sync-email-shell.mjs
+const BRAND = {
+  deep: "#085041",
+  green: "#1D9E75",
+  tint: "#E1F5EE",
+  ink: "#33403a",
+  muted: "#6b7a73",
+  line: "#e6ebe8",
+  page: "#e9ecea",
+};
+const SITE = "https://itrova.co";
+const SYS = "-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
+const DISPLAY_FONT = `'Syne',${SYS}`;
+const BODY_FONT = `'DM Sans',${SYS}`;
+
 const esc = (s: string) =>
-  String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
+  String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
+
+/** Primary call-to-action. The mso branch renders a real button in Outlook for Windows, which
+ *  ignores border-radius and padding on an anchor and would otherwise show a bare blue link. */
+function emailButton(href: string, label: string): string {
+  const w = Math.max(180, label.length * 10 + 60);
+  return `<!--[if mso]>
+<v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="${esc(href)}" style="height:48px;v-text-anchor:middle;width:${w}px;" arcsize="18%" stroke="f" fillcolor="${BRAND.green}">
+<w:anchorlock/><center style="color:#ffffff;font-family:Arial,sans-serif;font-size:16px;font-weight:bold;">${esc(label)}</center></v:roundrect>
+<![endif]-->
+<!--[if !mso]><!-->
+<a href="${esc(href)}" style="display:inline-block;background:${BRAND.green};color:#ffffff;font-size:16px;font-weight:700;text-decoration:none;padding:14px 30px;border-radius:9px;font-family:${DISPLAY_FONT};">${esc(label)}</a>
+<!--<![endif]-->`;
+}
+
+/** A tinted panel for the one detail the reader came for (a code, a link, an amount). */
+function emailPanel(rows: { label: string; value: string }[]): string {
+  const body = rows.map((r, i) => `
+          <div style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#0d6b52;font-weight:700;margin-bottom:5px;${i ? "margin-top:14px;" : ""}">${esc(r.label)}</div>
+          <div style="font-size:15px;color:${BRAND.deep};word-break:break-all;">${r.value}</div>`).join("");
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:${BRAND.tint};border-radius:10px;">
+        <tr><td style="padding:18px 20px;border-left:3px solid ${BRAND.green};border-radius:10px;font-family:${BODY_FONT};">${body}
+        </td></tr>
+      </table>`;
+}
+
+/** Wraps body HTML in the branded shell. `preheader` is the grey line inboxes show after the
+ *  subject; without one they scrape the first visible text, which is usually the greeting. */
+function emailShell(o: { title: string; preheader: string; body: string; footerNote?: string }): string {
+  return `<!DOCTYPE html><html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light dark"><meta name="supported-color-schemes" content="light dark">
+<title>${esc(o.title)}</title>
+<style>
+@font-face{font-family:'Syne';src:url('${SITE}/fonts/syne-latin-v1.woff2') format('woff2');font-weight:500 800;font-display:swap;unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2212,U+FEFF,U+FFFD;}
+@font-face{font-family:'Syne';src:url('${SITE}/fonts/syne-latin-ext-v1.woff2') format('woff2');font-weight:500 800;font-display:swap;unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+1E00-1E9F,U+1EF2-1EFF,U+20A0-20AB,U+20AD-20C0,U+2C60-2C7F,U+A720-A7FF;}
+@font-face{font-family:'DM Sans';src:url('${SITE}/fonts/dm-sans-latin-v1.woff2') format('woff2');font-weight:400 700;font-display:swap;unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2212,U+FEFF,U+FFFD;}
+@font-face{font-family:'DM Sans';src:url('${SITE}/fonts/dm-sans-latin-ext-v1.woff2') format('woff2');font-weight:400 700;font-display:swap;unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+1E00-1E9F,U+1EF2-1EFF,U+20A0-20AB,U+20AD-20C0,U+2C60-2C7F,U+A720-A7FF;}
+body{margin:0;padding:0;background:${BRAND.page};}
+@media only screen and (max-width:620px){.wrap{width:100%!important;}.pad{padding-left:20px!important;padding-right:20px!important;}}
+</style>
+<!--[if mso]><style>*{font-family:Arial,Helvetica,sans-serif!important;}</style><![endif]-->
+</head>
+<body style="margin:0;padding:0;background:${BRAND.page};">
+<div style="display:none;font-size:1px;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;">${esc(o.preheader)}</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:${BRAND.page};">
+<tr><td align="center" style="padding:24px 12px;">
+  <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" class="wrap" style="width:600px;max-width:600px;background:#ffffff;border-radius:14px;overflow:hidden;border:1px solid #dfe5e2;">
+    <tr><td style="height:4px;line-height:4px;font-size:0;background:${BRAND.green};">&nbsp;</td></tr>
+    <tr><td bgcolor="#ffffff" class="pad" style="background:#ffffff;padding:18px 32px;border-bottom:1px solid ${BRAND.line};">
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+        <td style="padding-right:10px;line-height:0;"><img src="${SITE}/icon-512.png" width="34" height="34" alt="" style="display:block;width:34px;height:34px;border:0;"></td>
+        <td style="font-family:${DISPLAY_FONT};font-size:20px;font-weight:700;color:${BRAND.deep};letter-spacing:-0.2px;">iTrova</td>
+      </tr></table>
+    </td></tr>
+    <tr><td class="pad" style="padding:28px 32px 26px;font-family:${BODY_FONT};">
+      <div style="font-family:${DISPLAY_FONT};font-size:21px;line-height:1.3;font-weight:700;color:${BRAND.deep};margin:0 0 14px;">${esc(o.title)}</div>
+${o.body}
+    </td></tr>
+    <tr><td bgcolor="#f7f9f8" class="pad" style="background:#f7f9f8;padding:18px 32px;border-top:1px solid ${BRAND.line};font-family:${BODY_FONT};">
+      <p style="margin:0;font-size:12px;line-height:1.6;color:#7c8a83;">iTrova by Allspire Technologies Limited &middot; RC 9702176${o.footerNote ? "<br>" + esc(o.footerNote) : ""}</p>
+    </td></tr>
+  </table>
+</td></tr></table>
+</body></html>`;
+}
+
+/** Body paragraph, sized and coloured for the shell. */
+const p = (html: string) =>
+  `      <p style="margin:0 0 14px;font-size:15px;line-height:1.65;color:${BRAND.ink};font-family:${BODY_FONT};">${html}</p>`;
+
+/** Small print under a call to action. */
+const small = (html: string) =>
+  `      <p style="margin:14px 0 0;font-size:13px;line-height:1.6;color:${BRAND.muted};font-family:${BODY_FONT};">${html}</p>`;
+
+/** Sub-heading inside the body. */
+const h2 = (text: string) =>
+  `      <div style="font-family:${DISPLAY_FONT};font-size:15px;font-weight:700;color:${BRAND.deep};margin:22px 0 6px;">${esc(text)}</div>`;
+
+/** A plain-text alternative. Sending HTML alone is a well known spam signal, so every send should
+ *  carry both parts. Collapses tags to text; block elements become line breaks. */
+function toPlainText(html: string): string {
+  const entities: Record<string, string> = {
+    nbsp: " ", amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", "#39": "'",
+    middot: "·", bull: "-", hellip: "...", mdash: "-", ndash: "-", rsquo: "'", lsquo: "'",
+  };
+  return html
+    .replace(/<head[\s\S]*?<\/head>/gi, "")
+    .replace(/<style[\s\S]*?<\/style>/gi, "")
+    .replace(/<!--[\s\S]*?-->/g, "")
+    // The preheader is a display-only device that duplicates the subject line.
+    .replace(/<div style="display:none[\s\S]*?<\/div>/i, "")
+    .replace(/<a [^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/gi, (_m, href, text) => {
+      const label = String(text).replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").trim();
+      const url = String(href).replace(/&amp;/g, "&");
+      return label && label !== url ? `${label} (${url})` : url;
+    })
+    .replace(/<li[^>]*>/gi, "\n- ")
+    // Cells join on one line; rows and blocks break.
+    .replace(/<\/t[dh]>\s*/gi, " ")
+    .replace(/<\s*(br|\/p|\/div|\/tr|\/h[1-6])\s*\/?>/gi, "\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&#(\d+);/g, (_m, n) => String.fromCharCode(Number(n)))
+    .replace(/&([a-z0-9#]+);/gi, (m, name) => entities[String(name).toLowerCase()] ?? m)
+    .replace(/[ \t]+/g, " ")
+    .replace(/[ \t]*\n[ \t]*/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+// >>> END EMAIL SHELL
 const money = (n: number) => "₦" + Number(n || 0).toLocaleString();
 
-const SIGNUP_BASE = "https://itrova.allspire.tech/auth";
+const DEFAULT_APP_URL = "https://itrova.allspire.tech";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
@@ -37,6 +162,17 @@ Deno.serve(async (req) => {
     const fromName = Deno.env.get("EMAIL_FROM_NAME") ?? "iTrova";
     const replyTo = Deno.env.get("EMAIL_REPLY_TO");
     if (!resendKey || !fromEmail) return json({ error: "Email is not configured (missing RESEND_API_KEY / EMAIL_FROM_ADDRESS)." }, 500);
+
+    // Where emailed links point. Deployment configuration, not business data, so it lives beside the
+    // other secrets. Must be https: these links carry sign-in tokens and referral attribution.
+    const appUrl = (Deno.env.get("ITROVA_APP_URL") ?? DEFAULT_APP_URL).replace(/\/+$/, "");
+    let appOrigin: URL;
+    try { appOrigin = new URL(appUrl); } catch { return json({ error: "ITROVA_APP_URL is not a valid URL." }, 500); }
+    const localDev = appOrigin.hostname === "localhost" || appOrigin.hostname === "127.0.0.1";
+    if (appOrigin.protocol !== "https:" && !(appOrigin.protocol === "http:" && localDev)) {
+      return json({ error: "ITROVA_APP_URL must be an https URL." }, 500);
+    }
+    const SIGNUP_BASE = `${appUrl}/auth`;
 
     // Caller must be admin (only admins register referrers).
     const caller = createClient(url, anon, { global: { headers: { Authorization: req.headers.get("Authorization") ?? "" } } });
@@ -72,7 +208,7 @@ Deno.serve(async (req) => {
         res = await fetch("https://api.resend.com/emails", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${resendKey}`, "Idempotency-Key": idempotencyKey },
-        body: JSON.stringify({ from: `${fromName} <${fromEmail}>`, to: [to], subject, html, ...(replyTo ? { reply_to: replyTo } : {}) }),
+        body: JSON.stringify({ from: `${fromName} <${fromEmail}>`, to: [to], subject, html, text: toPlainText(html), ...(replyTo ? { reply_to: replyTo } : {}) }),
         // A stalled provider connection must not hold the invocation until the platform kills it.
         signal: AbortSignal.timeout(15_000),
         });
@@ -96,11 +232,15 @@ Deno.serve(async (req) => {
       const closingDecline = replyTo
         ? "If you think we have missed something, or your situation changes, reply to this email and we will take another look."
         : "If your situation changes, you are welcome to apply again later.";
-      const declineHtml =
-        `<p>Hi ${esc(app.name)},</p>
-         <p>Thank you for applying to the iTrova affiliate program. After reviewing your application, we are not able to bring you on board at this time.</p>
-         <p>${closingDecline}</p>
-         <p>The iTrova team</p>`;
+      const declineHtml = emailShell({
+        title: "Your iTrova affiliate application",
+        preheader: "An update on the application you sent us.",
+        body:
+          p(`Hi ${esc(app.name)},`) +
+          p("Thank you for applying to the iTrova affiliate program. After reviewing your application, we are not able to bring you on board at this time.") +
+          p(esc(closingDecline)) +
+          p("The iTrova team"),
+      });
       const err = await deliver(app.email, "Your iTrova affiliate application", declineHtml, `app-${appId}-decline`);
       await stamp("decline", err);
       if (err) return json({ error: err }, 502);
@@ -120,18 +260,25 @@ Deno.serve(async (req) => {
     if (refErr) return json({ error: refErr.message }, 500);
     if (!ref) return json({ error: "Referrer not found." }, 404);
     if (!ref.email) { await stamp("welcome", "No email on file"); return json({ error: "This referrer has no email on file." }, 422); }
-    const { data: cfg } = await admin.from("referral_config").select("*").maybeSingle();
+    // The share and discount are a commitment about money, so a missing config must stop the send
+    // rather than fall back to a figure that may not match the programme's actual terms.
+    const { data: cfg, error: cfgErr } = await admin.from("referral_config").select("*").maybeSingle();
+    if (cfgErr) return json({ error: cfgErr.message }, 500);
+    if (!cfg) return json({ error: "The referral programme settings could not be read, so no terms were sent." }, 500);
 
-    const share = ref.share_percent ?? cfg?.affiliate_share_percent ?? 25;
-    const staffBonus = (cfg?.staff_bonus ?? {}) as Record<string, number>;
+    const share = ref.share_percent ?? cfg.affiliate_share_percent;
+    const staffBonus = (cfg.staff_bonus ?? {}) as Record<string, number>;
     const link = `${SIGNUP_BASE}?ref=${encodeURIComponent(ref.code)}`;
     const isAffiliate = ref.kind === "affiliate";
 
+    const bullet = (html: string) =>
+      `<tr><td valign="top" style="padding:0 8px 7px 0;color:${BRAND.green};font-size:15px;line-height:1.6;font-family:${BODY_FONT};">&bull;</td>
+           <td style="padding-bottom:7px;font-size:15px;line-height:1.6;color:${BRAND.ink};font-family:${BODY_FONT};">${html}</td></tr>`;
     const terms = isAffiliate
-      ? `<li>You earn <strong>${share}%</strong> of everything a business you refer pays in their first 12 months.</li>
-         <li>Rewards are paid once the business makes its first payment.</li>`
-      : `<li>You earn a bonus for each business you refer that subscribes: Pro ${money(staffBonus.pro ?? 0)}, Business ${money(staffBonus.business ?? 0)}, Enterprise ${money(staffBonus.enterprise ?? 0)}.</li>
-         <li>Bonuses are paid once the referred business makes its first payment.</li>`;
+      ? bullet(`You earn <strong style="color:${BRAND.deep};">${share}%</strong> of everything a business you refer pays in their first 12 months.`) +
+        bullet("Rewards are paid once the business makes its first payment.")
+      : bullet(`You earn a bonus for each business you refer that subscribes: Pro ${money(staffBonus.pro ?? 0)}, Business ${money(staffBonus.business ?? 0)}, Enterprise ${money(staffBonus.enterprise ?? 0)}.`) +
+        bullet("Bonuses are paid once the referred business makes its first payment.");
 
     // "Reply to this email" is only promised when a monitored reply-to is configured — the from
     // address is a no-reply, and inviting replies into a void is worse than not inviting them.
@@ -139,16 +286,22 @@ Deno.serve(async (req) => {
       ? "Share your link on WhatsApp, with your network, or anywhere business owners are. Reply to this email if you have any questions."
       : "Share your link on WhatsApp, with your network, or anywhere business owners are.";
 
-    const html =
-      `<p>Hi ${esc(ref.name)},</p>
-       <p>You're set up as an iTrova ${isAffiliate ? "affiliate" : "referral partner"}. Here's everything you need to start earning.</p>
-       <p><strong>Your referral code:</strong> ${esc(ref.code)}<br>
-       <strong>Your share link:</strong> <a href="${esc(link)}">${esc(link)}</a></p>
-       <p>Anyone who signs up through your link (or enters your code) is automatically attributed to you, and they get <strong>${cfg?.referee_discount_percent ?? 20}% off</strong> their first payment.</p>
-       <p><strong>How you earn:</strong></p>
-       <ul>${terms}</ul>
-       <p>${closing}</p>
-       <p>The iTrova team</p>`;
+    const welcomeBody =
+      p(`Hi ${esc(ref.name)},`) +
+      p(`You're set up as an iTrova ${isAffiliate ? "affiliate" : "referral partner"}. Here is everything you need to start earning. Anyone who signs up through your link is attributed to you automatically, and they get <strong style="color:${BRAND.deep};">${cfg.referee_discount_percent}% off</strong> their first payment.`) +
+      `      <div style="margin:18px 0;">${emailPanel([
+        { label: "Your referral code", value: `<span style="font-size:22px;font-weight:700;letter-spacing:1.5px;font-family:'SF Mono',Consolas,monospace;">${esc(ref.code)}</span>` },
+        { label: "Your share link", value: `<a href="${esc(link)}" style="color:#0d6b52;text-decoration:underline;">${esc(link)}</a>` },
+      ])}</div>` +
+      h2("How you earn") +
+      `      <table role="presentation" cellpadding="0" cellspacing="0" border="0">${terms}</table>`;
+
+    const html = emailShell({
+      title: `You are set up as an iTrova ${isAffiliate ? "affiliate" : "referral partner"}`,
+      preheader: "Your referral code, your share link and how you get paid.",
+      footerNote: "You are receiving this because you joined the iTrova referral program.",
+      body: welcomeBody + `      <div style="margin-top:22px;">` + p(esc(closing)) + p("The iTrova team") + `</div>`,
+    });
 
     const err = await deliver(ref.email, "Welcome to the iTrova referral program", html, idempotencyKey);
     await stamp("welcome", err);
