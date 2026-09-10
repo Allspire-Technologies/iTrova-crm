@@ -3,6 +3,27 @@
 Notable changes to the iTrova CRM (Admin OS). The format follows
 [Keep a Changelog](https://keepachangelog.com/); entries are grouped by ship date, newest first.
 
+## 2026-09-10: Affiliate dashboard logins (Phase 1)
+
+### Added
+
+- **Affiliates can be given a login to the iTrova affiliate dashboard.** Approving an application
+  now creates the login and the welcome email carries a Set your password button. Adding an affiliate
+  manually does the same. On the Referrers tab an **Access** column shows No login, Invited or
+  Active, and the row menu offers **Create login** for existing affiliates and **Resend sign-in
+  link** for invited ones, which sends a short "your dashboard is ready" email.
+- **Sign-in is by email and password.** The referral code is for sharing, not for signing in, and
+  the email says so. No password is ever emailed: the link lets the affiliate choose their own.
+- **Deactivating an affiliate signs them out immediately** and blocks them at the next sign-in.
+  Migration `20260910100000_affiliate_access.sql` links `cs_referrer` to an auth account, adds the
+  affiliate's own `my_affiliate_profile()`, the staff-only `cs_affiliate_access()` behind the badge,
+  and a trigger that clears the affiliate's sessions when `active` turns off.
+
+### Changed
+
+- **An affiliate's email is locked once a login exists,** because it is now their sign-in address.
+  Correct it before creating the login; a deliberate change-address action follows in Phase 3.
+
 ## 2026-09-10: Branded transactional email
 
 ### Changed

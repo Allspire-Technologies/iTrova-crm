@@ -20,6 +20,9 @@ export type Referrer = {
   sharePercent: number | null; // null = use the config default
   active: boolean;
   notes: string | null;
+  /** Auth account behind the affiliate dashboard login. Set server-side by send-referrer-welcome;
+   *  never written from the browser. */
+  userId: string | null;
 };
 
 export type ReferrerApplication = {
@@ -125,8 +128,37 @@ export async function saveReferrer(r: Referrer, isNew: boolean): Promise<void> {
  *  idempotencyKey when retrying a failed send so the provider replays instead of double-sending.
  *  Pass applicationId when the referrer came from a website application so the delivery outcome
  *  is stamped on that application. */
-export async function sendReferrerWelcome(code: string, idempotencyKey?: string, applicationId?: string): Promise<void> {
-  await invokeReferralEmail({ code, idempotency_key: idempotencyKey ?? null, application_id: applicationId ?? null });
+export type WelcomeOptions = {
+  /** Also create (or re-issue) the affiliate's dashboard login and put the set-password link in the email. */
+  includeLogin?: boolean;
+  /** "access" sends the short "dashboard is ready" note instead of the full welcome. */
+  variant?: "welcome" | "access";
+};
+export async function sendReferrerWelcome(code: string, idempotencyKey?: string, applicationId?: string, opts: WelcomeOptions = {}): Promise<void> {
+  await invokeReferralEmail({
+    code, idempotency_key: idempotencyKey ?? null, application_id: applicationId ?? null,
+    include_login: opts.includeLogin === true, variant: opts.variant ?? "welcome",
+  });
+}
+
+/** Dashboard access per affiliate code, for the Referrers tab badge. Staff-gated RPC. */
+export type AffiliateAccess = { userId: string | null; lastSignInAt: string | null };
+export type AccessState = "none" | "invited" | "active";
+export function accessState(a: AffiliateAccess | undefined): AccessState {
+  if (!a?.userId) return "none";
+  return a.lastSignInAt ? "active" : "invited";
+}
+export async function listAffiliateAccess(): Promise<Record<string, AffiliateAccess>> {
+  const { data, error } = await sb.rpc("cs_affiliate_access");
+  if (error) throw error;
+  const out: Record<string, AffiliateAccess> = {};
+  for (const r of (data ?? []) as Record<string, unknown>[]) {
+    out[String(r.code)] = {
+      userId: r.user_id == null ? null : String(r.user_id),
+      lastSignInAt: r.last_sign_in_at == null ? null : String(r.last_sign_in_at),
+    };
+  }
+  return out;
 }
 
 /** Email a rejected applicant a polite decline (same function, decision path). The function
@@ -222,5 +254,6 @@ function mapReferrer(r: Record<string, unknown>): Referrer {
     accountName: r.account_name == null ? null : String(r.account_name),
     sharePercent: r.share_percent == null ? null : Number(r.share_percent),
     active: Boolean(r.active), notes: r.notes == null ? null : String(r.notes),
+    userId: r.user_id == null ? null : String(r.user_id),
   };
 }

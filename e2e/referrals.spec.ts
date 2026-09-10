@@ -113,4 +113,70 @@ test.describe("Referrals module", () => {
     expect(req.postData() ?? "").toContain('"p_kind":"subscription"');
     expect(req.postData() ?? "").toContain('"p_business_id":"biz-1"');
   });
+  const AFFILIATE_SUMMARY = {
+    code: "ADAEZE7741", name: "Adaeze Obi", kind: "affiliate", phone: "08030007741", email: "adaeze@x.example", active: true,
+    business_id: null, effective_share_percent: 25, referred_count: 2, converted_count: 1, earned: 22500, paid: 0, accrued: 22500,
+    bank_name: null, account_number: null, account_name: null,
+  };
+
+  test("approving an application also creates the dashboard login (include_login in the welcome call)", async ({ page }) => {
+    await signIn(page, { staff: true });
+    await stubReferrals(page, { applications: [
+      { id: "app-2", name: "Tunde Bello", phone: "08030000305", email: "tunde@x.example", how_promote: "WhatsApp groups", status: "pending", created_at: "2026-07-17T00:00:00Z" },
+    ] });
+    await page.goto("/referrals");
+    await page.getByRole("tab", { name: /Applications/ }).click();
+    const welcome = page.waitForRequest((r) => r.url().includes("/functions/v1/send-referrer-welcome") && r.method() === "POST");
+    await page.getByRole("button", { name: "Approve", exact: true }).click();
+    await expect(page.getByText(/link to set their dashboard password/)).toBeVisible();
+    await page.getByRole("button", { name: "Approve and email" }).click();
+    const req = await welcome;
+    expect(req.postData() ?? "").toContain('"include_login":true');
+    expect(req.postData() ?? "").toContain('"variant":"welcome"');
+  });
+
+  test("Referrers tab shows access state; Create login emails the access-only sign-in link", async ({ page }) => {
+    await signIn(page, { staff: true });
+    await stubReferrals(page, { summary: [AFFILIATE_SUMMARY], access: [{ code: "ADAEZE7741", user_id: null, last_sign_in_at: null }] });
+    await page.goto("/referrals");
+    await page.getByRole("tab", { name: "Referrers" }).click();
+    await expect(page.getByText("No login")).toBeVisible();
+    await page.getByRole("button", { name: "More actions" }).click();
+    const welcome = page.waitForRequest((r) => r.url().includes("/functions/v1/send-referrer-welcome") && r.method() === "POST");
+    await page.getByRole("menuitem", { name: "Create login" }).click();
+    const req = await welcome;
+    expect(req.postData() ?? "").toContain('"include_login":true');
+    expect(req.postData() ?? "").toContain('"variant":"access"');
+    await expect(page.getByText(/Sign-in link emailed to/)).toBeVisible();
+  });
+
+  test("an invited affiliate shows Invited, an active one shows Active", async ({ page }) => {
+    await signIn(page, { staff: true });
+    await stubReferrals(page, {
+      summary: [AFFILIATE_SUMMARY, { ...AFFILIATE_SUMMARY, code: "BOLA0001", name: "Bola Adeyemi", email: "bola@x.example" }],
+      access: [
+        { code: "ADAEZE7741", user_id: "u-1", last_sign_in_at: null },
+        { code: "BOLA0001", user_id: "u-2", last_sign_in_at: "2026-09-09T10:00:00Z" },
+      ],
+    });
+    await page.goto("/referrals");
+    await page.getByRole("tab", { name: "Referrers" }).click();
+    await expect(page.getByText("Invited", { exact: true })).toBeVisible();
+    await expect(page.getByText("Active", { exact: true })).toBeVisible();
+  });
+
+  test("the email field is locked once a login exists", async ({ page }) => {
+    await signIn(page, { staff: true });
+    await stubReferrals(page, {
+      summary: [AFFILIATE_SUMMARY],
+      access: [{ code: "ADAEZE7741", user_id: "u-1", last_sign_in_at: null }],
+      referrers: [{ code: "ADAEZE7741", name: "Adaeze Obi", kind: "affiliate", phone: "08030007741", email: "adaeze@x.example", bank_name: null, account_number: null, account_name: null, share_percent: null, active: true, notes: null, user_id: "u-1", created_at: "2026-07-01T00:00:00Z" }],
+    });
+    await page.goto("/referrals");
+    await page.getByRole("tab", { name: "Referrers" }).click();
+    await page.getByRole("button", { name: "More actions" }).click();
+    await page.getByRole("menuitem", { name: "Edit" }).click();
+    await expect(page.getByLabel(/^Email/)).toBeDisabled();
+    await expect(page.getByText("(sign-in address, locked)")).toBeVisible();
+  });
 });

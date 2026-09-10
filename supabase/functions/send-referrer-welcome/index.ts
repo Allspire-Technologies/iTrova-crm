@@ -6,6 +6,11 @@
 // details + config are read SERVER-SIDE from the code, so the browser only passes the code.
 // The Resend key + from-identity live here (Edge Function secrets), never the browser.
 //
+// With include_login it ALSO creates the affiliate's dashboard login: it mints a set-password token
+// and renders it as a button. The token is minted and used inside this one call, so it never passes
+// through the admin's browser. variant "access" sends the short "dashboard is ready" note instead of
+// the full welcome, for an affiliate registered before logins existed.
+//
 // Secrets:  RESEND_API_KEY=re_...  EMAIL_FROM_ADDRESS=no-reply@mail.allspire.tech
 //           EMAIL_FROM_NAME="iTrova"  EMAIL_REPLY_TO=<monitored inbox — REQUIRED in spirit here:
 //           the template invites replies, and the from address is a no-reply>
@@ -180,7 +185,7 @@ Deno.serve(async (req) => {
     if (roleErr) return json({ error: roleErr.message }, 401);
     if (role !== "admin") return json({ error: "Only Management/Admin can send referrer invites." }, 403);
 
-    const { code, idempotency_key, application_id, decision } = await req.json().catch(() => ({}));
+    const { code, idempotency_key, application_id, decision, include_login, variant } = await req.json().catch(() => ({}));
     const appId = typeof application_id === "string" && application_id ? application_id : null;
 
     // Retry-safe: same scheme as send-customer-email — the UI holds a key per attempt-series, and
@@ -251,7 +256,7 @@ Deno.serve(async (req) => {
     if (!code || typeof code !== "string") return json({ error: "A referrer code is required." }, 400);
     // Application-backed welcomes get a deterministic key (durable across remounts/devices);
     // registry-form welcomes keep the client's per-attempt-series key.
-    const idempotencyKey = appId
+    let idempotencyKey = appId
       ? `app-${appId}-welcome`
       : `ref-${code.toUpperCase().replace(/[^A-Z0-9]/g, "")}-${clientKey}`;
 
@@ -270,6 +275,47 @@ Deno.serve(async (req) => {
     const staffBonus = (cfg.staff_bonus ?? {}) as Record<string, number>;
     const link = `${SIGNUP_BASE}?ref=${encodeURIComponent(ref.code)}`;
     const isAffiliate = ref.kind === "affiliate";
+
+    // ---- Dashboard login (optional) ----
+    const wantsLogin = include_login === true;
+    let setPasswordUrl: string | null = null;
+    if (wantsLogin) {
+      if (!isAffiliate) return json({ error: "Only affiliates get a dashboard login." }, 422);
+      if (!ref.active) return json({ error: "This affiliate is deactivated, so it has no dashboard access." }, 422);
+      // invite_token is what stops iTrova's handle_new_user trigger creating a business for this
+      // account; the value names the kind of account so the metadata is not misleading.
+      const invite = await admin.auth.admin.generateLink({
+        type: "invite",
+        email: ref.email,
+        options: { data: { invite_token: "affiliate", affiliate_code: ref.code, full_name: ref.name } },
+      });
+      let userId = invite.data?.user?.id;
+      let tokenHash = invite.data?.properties?.hashed_token;
+      let linkType = "invite";
+      if (invite.error) {
+        // Already has an account (re-issuing a link): a recovery link sets a password just the same.
+        const recovery = await admin.auth.admin.generateLink({ type: "recovery", email: ref.email });
+        if (recovery.error) return json({ error: invite.error.message }, 400);
+        userId = recovery.data?.user?.id;
+        tokenHash = recovery.data?.properties?.hashed_token;
+        linkType = "recovery";
+      }
+      if (!userId || !tokenHash) return json({ error: "Could not generate the sign-in link." }, 500);
+      const linked = await admin.from("cs_referrer").update({ user_id: userId }).eq("code", ref.code);
+      if (linked.error) return json({ error: linked.error.message }, 500);
+      setPasswordUrl = `${appUrl}/affiliates/set-password?token_hash=${encodeURIComponent(tokenHash)}&type=${linkType}`;
+      // Minting a token invalidates the previous one, so this email must really be sent rather than
+      // replayed from the provider's cache: its key is tied to the token it carries.
+      idempotencyKey = `login-${ref.code}-${tokenHash.slice(0, 32)}`;
+    }
+    const loginBlock = setPasswordUrl
+      ? h2("Your affiliate dashboard") +
+        p("See who you have referred, what you have earned and what we have paid you.") +
+        `      <div style="margin:18px 0 0;">${emailButton(setPasswordUrl, "Set your password")}</div>` +
+        small(`Or copy this address into your browser:<br><a href="${esc(setPasswordUrl)}" style="color:#0d6b52;word-break:break-all;">${esc(setPasswordUrl)}</a>`) +
+        small(`You sign in at <a href="${esc(appUrl)}/affiliates/login" style="color:#0d6b52;">${esc(appUrl)}/affiliates/login</a> with <strong style="color:${BRAND.ink};">${esc(ref.email)}</strong>. Your referral code is for sharing, not for signing in.`)
+      : "";
+    const accessOnly = wantsLogin && variant === "access";
 
     const bullet = (html: string) =>
       `<tr><td valign="top" style="padding:0 8px 7px 0;color:${BRAND.green};font-size:15px;line-height:1.6;font-family:${BODY_FONT};">&bull;</td>
@@ -296,14 +342,21 @@ Deno.serve(async (req) => {
       h2("How you earn") +
       `      <table role="presentation" cellpadding="0" cellspacing="0" border="0">${terms}</table>`;
 
-    const html = emailShell({
-      title: `You are set up as an iTrova ${isAffiliate ? "affiliate" : "referral partner"}`,
-      preheader: "Your referral code, your share link and how you get paid.",
-      footerNote: "You are receiving this because you joined the iTrova referral program.",
-      body: welcomeBody + `      <div style="margin-top:22px;">` + p(esc(closing)) + p("The iTrova team") + `</div>`,
-    });
+    const html = accessOnly
+      ? emailShell({
+          title: "Your affiliate dashboard is ready",
+          preheader: "Set a password and see your referrals, earnings and payouts.",
+          footerNote: "You are receiving this because you joined the iTrova referral program.",
+          body: p(`Hi ${esc(ref.name)},`) + loginBlock + `      <div style="margin-top:22px;">` + p("The iTrova team") + `</div>`,
+        })
+      : emailShell({
+          title: `You are set up as an iTrova ${isAffiliate ? "affiliate" : "referral partner"}`,
+          preheader: "Your referral code, your share link and how you get paid.",
+          footerNote: "You are receiving this because you joined the iTrova referral program.",
+          body: welcomeBody + loginBlock + `      <div style="margin-top:22px;">` + p(esc(closing)) + p("The iTrova team") + `</div>`,
+        });
 
-    const err = await deliver(ref.email, "Welcome to the iTrova referral program", html, idempotencyKey);
+    const err = await deliver(ref.email, accessOnly ? "Your iTrova affiliate dashboard is ready" : "Welcome to the iTrova referral program", html, idempotencyKey);
     await stamp("welcome", err);
     if (err) return json({ error: err }, 502);
     return json({ ok: true, to_email: ref.email });

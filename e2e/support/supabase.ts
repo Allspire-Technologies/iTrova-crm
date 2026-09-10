@@ -454,7 +454,7 @@ export async function stubTasks(page: Page) {
 }
 
 // Referrals module: config, registry, applications queue, and the cs_referrals RPC.
-export async function stubReferrals(page: Page, opts: { referrers?: unknown[]; applications?: unknown[]; referred?: unknown[]; summary?: unknown[] } = {}) {
+export async function stubReferrals(page: Page, opts: { referrers?: unknown[]; applications?: unknown[]; referred?: unknown[]; summary?: unknown[]; access?: unknown[] } = {}) {
   await page.route("**/rest/v1/referral_config**", (r) =>
     json(r, r.request().headers()["accept"]?.includes("vnd.pgrst.object")
       ? { id: true, affiliate_share_percent: 25, business_share_percent: 25, referee_discount_percent: 20, staff_bonus: { pro: 2000, business: 5000, enterprise: 10000 } }
@@ -471,6 +471,7 @@ export async function stubReferrals(page: Page, opts: { referrers?: unknown[]; a
   });
   await page.route("**/rest/v1/rpc/cs_referrals**", (r) => json(r, opts.referred ?? []));
   await page.route("**/rest/v1/rpc/cs_referrers_summary**", (r) => json(r, opts.summary ?? []));
+  await page.route("**/rest/v1/rpc/cs_affiliate_access**", (r) => json(r, opts.access ?? []));
   await page.route("**/rest/v1/rpc/cs_record_payout**", (r) => json(r, 2)); // months added
   await page.route("**/functions/v1/send-referrer-welcome**", (r) => json(r, { ok: true, to_email: "ada@x.example" }));
 }
