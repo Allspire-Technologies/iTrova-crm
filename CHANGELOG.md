@@ -3,6 +3,40 @@
 Notable changes to the iTrova CRM (Admin OS). The format follows
 [Keep a Changelog](https://keepachangelog.com/); entries are grouped by ship date, newest first.
 
+## 2026-09-10: Branded transactional email
+
+### Changed
+
+- **Every email iTrova sends now looks like iTrova.** Affiliate welcomes and declines, the customer
+  activation link and admin-composed customer emails share one branded template: the logo and
+  wordmark, brand green, a real call-to-action button that survives Outlook, and the referral code
+  set in a highlighted panel. Brand fonts load where the email client allows it and fall back to a
+  clean system stack everywhere else, so nothing looks broken in Gmail.
+- **Each email now carries a plain-text part as well as HTML.** Sending HTML alone is a well known
+  spam signal, so this should help messages reach the inbox, and it gives screen readers something
+  sensible to read.
+- **Emailed links follow `ITROVA_APP_URL`** instead of a hardcoded address, defaulting to the
+  production app. The function refuses a non-https value, because these links carry sign-in tokens.
+
+### Fixed
+
+- **An affiliate can no longer be emailed programme terms that were not read from the database.**
+  The welcome email used to fall back to 25% and 20% if the referral settings could not be read,
+  which risked promising an affiliate a share that did not match the programme. It now refuses to
+  send instead.
+- **The affiliate welcome email now sends on production.** Adding a referrer failed with
+  "permission denied for table cs_referrer": the referral tables predate the migration that restored
+  `service_role` default privileges, so on the older production project the email function had
+  never been granted access to them. Staging cannot reproduce this. Migration
+  `20260910095000_referral_service_role_grants.sql` names the grants explicitly, matching how every
+  other table the email functions touch is already handled.
+
+### Added
+
+- `scripts/sync-email-shell.mjs` copies the shared email template into each function from one
+  canonical source, with a `--check` mode. Functions are deployed by pasting single files, so three
+  hand-maintained copies would drift; this makes them identical by construction.
+
 ## 2026-09-10: Referral tables restricted to staff
 
 ### Fixed
