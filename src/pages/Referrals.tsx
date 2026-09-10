@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { MoreHorizontal } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { LoadingState } from "@/components/states/LoadingState";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
@@ -15,8 +16,8 @@ import { toast } from "sonner";
 import {
   getReferralConfig, updateReferralConfig, listReferrers, saveReferrer, setReferrerActive, sendReferrerWelcome,
   listApplications, setApplicationStatus, listReferredBusinesses, listReferrerSummary, recordPayout,
-  sendApplicationDecline, referrerHistory, deleteReferrer,
-  type Referrer, type ReferrerApplication, type ReferredBusiness, type ReferrerSummary,
+  sendApplicationDecline, referrerHistory, deleteReferrer, listAffiliateAccess, accessState,
+  type Referrer, type ReferrerApplication, type ReferredBusiness, type ReferrerSummary, type AffiliateAccess, type AccessState,
 } from "@/lib/referrals";
 import { rewardFor, suggestCode, type ReferralConfig, type ReferrerKind } from "@/lib/referralMath";
 
@@ -137,14 +138,71 @@ function ReferredTab({ config, seesMoney }: { config: ReferralConfig; seesMoney:
 }
 
 // --------------------------------------------------------------------------- Referrers registry
-const EMPTY_REFERRER: Referrer = { code: "", name: "", kind: "affiliate", phone: "", email: "", bankName: "", accountNumber: "", accountName: "", sharePercent: null, active: true, notes: "" };
+const EMPTY_REFERRER: Referrer = { code: "", name: "", kind: "affiliate", phone: "", email: "", bankName: "", accountNumber: "", accountName: "", sharePercent: null, active: true, notes: "", userId: null };
+
+function AccessBadge({ state }: { state: AccessState }) {
+  if (state === "active") return <Badge>Active</Badge>;
+  if (state === "invited") return <Badge variant="secondary">Invited</Badge>;
+  return <Badge variant="outline">No login</Badge>;
+}
+
+// Row overflow: the primary money action stays inline; everything else lives here so the row
+// never grows past three visible actions as Phase 3 adds more.
+type MenuItem = { label: string; onClick: () => void; disabled?: boolean; hint?: string; danger?: boolean };
+function RowMenu({ items }: { items: MenuItem[] }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [open]);
+  if (items.length === 0) return null;
+  return (
+    <div ref={ref} className="relative inline-block">
+      <Button variant="ghost" size="sm" aria-label="More actions" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+        <MoreHorizontal className="size-4" />
+      </Button>
+      {open && (
+        <div role="menu" className="absolute right-0 top-full z-20 mt-1 w-52 rounded-xl border border-border bg-card p-1 text-left shadow-lg">
+          {items.map((it) => (
+            <button key={it.label} type="button" role="menuitem" disabled={it.disabled} title={it.hint}
+              onClick={() => { setOpen(false); it.onClick(); }}
+              className={cn("block w-full rounded-lg px-2 py-1.5 text-left text-sm hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50", it.danger && "text-destructive")}>
+              {it.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function ReferrersTab({ isAdmin, config, seesMoney }: { isAdmin: boolean; config: ReferralConfig | null; seesMoney: boolean }) {
   const [rows, setRows] = useState<ReferrerSummary[] | null>(null);
   const [editing, setEditing] = useState<{ r: Referrer; isNew: boolean } | null>(null);
   const [payout, setPayout] = useState<ReferrerSummary | null>(null);
-  const load = () => listReferrerSummary().then(setRows).catch((e) => toast.error(msg(e)));
+  const [access, setAccess] = useState<Record<string, AffiliateAccess>>({});
+  const [sendingLogin, setSendingLogin] = useState<string | null>(null);
+  // Access status is a separate staff-gated RPC; if it fails the tab still lists referrers.
+  const load = () => Promise.all([listReferrerSummary(), listAffiliateAccess().catch(() => ({}))])
+    .then(([summary, acc]) => { setRows(summary); setAccess(acc); })
+    .catch((e) => toast.error(msg(e)));
   useEffect(() => { load(); }, []);
+
+  // Creates the dashboard login (or re-issues the link) and emails the short "dashboard is ready"
+  // note. The function mints the token server-side; a fresh key per click means a deliberate resend
+  // is never replayed from the provider's cache.
+  const sendLogin = async (r: ReferrerSummary) => {
+    if (!r.email) return toast.error("Add an email to this affiliate first.");
+    setSendingLogin(r.code);
+    try {
+      await sendReferrerWelcome(r.code, crypto.randomUUID(), undefined, { includeLogin: true, variant: "access" });
+      toast.success(`Sign-in link emailed to ${r.email}`);
+      load();
+    } catch (e) { toast.error(msg(e)); } finally { setSendingLogin(null); }
+  };
 
   // Only affiliate/staff (in cs_referrer) are editable here; businesses opt in from their portal.
   const editRegistry = async (code: string) => {
@@ -165,11 +223,12 @@ function ReferrersTab({ isAdmin, config, seesMoney }: { isAdmin: boolean; config
                 <TableHead className="text-right">Referrals</TableHead>
                 {seesMoney && <TableHead className="text-right">Earned</TableHead>}
                 {seesMoney && <TableHead className="text-right">Accrued</TableHead>}
+                <TableHead>Access</TableHead>
                 <TableHead></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {rows.length === 0 && <TableRow><TableCell colSpan={7} className="py-8 text-center text-muted-foreground">No referrers yet.</TableCell></TableRow>}
+              {rows.length === 0 && <TableRow><TableCell colSpan={8} className="py-8 text-center text-muted-foreground">No referrers yet.</TableCell></TableRow>}
               {rows.map((r) => (
                 <TableRow key={r.code} className={r.active ? "" : "opacity-50"}>
                   <TableCell className="font-mono text-xs font-semibold">{r.code}</TableCell>
@@ -178,11 +237,24 @@ function ReferrersTab({ isAdmin, config, seesMoney }: { isAdmin: boolean; config
                   <TableCell className="text-right text-muted-foreground">{r.convertedCount}/{r.referredCount}</TableCell>
                   {seesMoney && <TableCell className="text-right tabular-nums text-muted-foreground">{formatMoney(r.earned)}</TableCell>}
                   {seesMoney && <TableCell className="text-right tabular-nums font-medium text-brand-dark">{formatMoney(r.accrued)}</TableCell>}
+                  <TableCell>
+                    {r.kind === "affiliate" ? <AccessBadge state={accessState(access[r.code])} /> : <span className="text-xs text-muted-foreground">—</span>}
+                  </TableCell>
                   <TableCell className="text-right whitespace-nowrap">
                     {isAdmin && r.accrued > 0 && (
                       <Button variant="ghost" size="sm" onClick={() => setPayout(r)}>{r.kind === "business" ? "Apply credit" : "Mark paid"}</Button>
                     )}
-                    {isAdmin && r.kind !== "business" && <Button variant="ghost" size="sm" onClick={() => editRegistry(r.code)}>Edit</Button>}
+                    {isAdmin && r.kind !== "business" && (
+                      <RowMenu items={[
+                        { label: "Edit", onClick: () => editRegistry(r.code) },
+                        ...(r.kind === "affiliate" && r.active ? [{
+                          label: sendingLogin === r.code ? "Sending…" : access[r.code]?.userId ? "Resend sign-in link" : "Create login",
+                          onClick: () => sendLogin(r),
+                          disabled: sendingLogin === r.code || !r.email,
+                          hint: !r.email ? "Add an email to this affiliate first" : undefined,
+                        }] : []),
+                      ]} />
+                    )}
                   </TableCell>
                 </TableRow>
               ))}
@@ -280,7 +352,7 @@ function ReferrerForm({ state, config, onClose, onSaved, onToggle }: {
       await saveReferrer(r, state.isNew);
       // On add, optionally email the referrer their code + what the program entails.
       if (state.isNew && emailThem && r.email?.trim()) {
-        try { await sendReferrerWelcome(r.code.trim().toUpperCase(), welcomeKeyRef.current); toast.success(`Saved — details emailed to ${r.email}`); }
+        try { await sendReferrerWelcome(r.code.trim().toUpperCase(), welcomeKeyRef.current, undefined, { includeLogin: r.kind === "affiliate" }); toast.success(`Saved — details emailed to ${r.email}`); }
         catch (e) { toast.warning(`Saved, but the email didn't send: ${msg(e)}`); }
       } else {
         toast.success("Saved");
@@ -310,7 +382,10 @@ function ReferrerForm({ state, config, onClose, onSaved, onToggle }: {
               {state.isNew && <Button variant="outline" size="sm" type="button" onClick={() => set({ code: suggestCode(r.name, r.phone) })}>Suggest</Button>}
             </div>
           </label>
-          <label className="text-xs text-muted-foreground">Email<Input value={r.email ?? ""} onChange={(e) => set({ email: e.target.value })} /></label>
+          <label className="text-xs text-muted-foreground">Email{r.userId && <span className="text-muted-foreground/70"> (sign-in address, locked)</span>}
+            <Input value={r.email ?? ""} onChange={(e) => set({ email: e.target.value })} disabled={!!r.userId}
+              title={r.userId ? "This affiliate signs in with this address. It cannot be edited here once a login exists." : undefined} />
+          </label>
           {r.kind === "affiliate" && (
             <label className="text-xs text-muted-foreground">Share % <span className="text-muted-foreground/70">(blank = {config?.affiliate_share_percent ?? 25}%)</span>
               <Input type="number" value={r.sharePercent ?? ""} onChange={(e) => set({ sharePercent: e.target.value === "" ? null : Number(e.target.value) })} />
@@ -328,7 +403,7 @@ function ReferrerForm({ state, config, onClose, onSaved, onToggle }: {
         {state.isNew && (
           <label className="flex items-center gap-2 text-sm text-muted-foreground">
             <input type="checkbox" checked={emailThem} onChange={(e) => setEmailThem(e.target.checked)} />
-            Email them their code &amp; how the program works {!r.email?.trim() && <span className="text-xs">(add an email first)</span>}
+            Email them their code &amp; how the program works{r.kind === "affiliate" && ", with a link to set their dashboard password"} {!r.email?.trim() && <span className="text-xs">(add an email first)</span>}
           </label>
         )}
         <div className="flex items-center justify-between gap-2 pt-1">
@@ -383,10 +458,10 @@ function ApplicationsTab({ isAdmin, onChange }: { isAdmin: boolean; onChange: ()
     try {
       // Create the affiliate registry entry (suggested code), mark approved, and email them.
       const code = suggestCode(a.name, a.phone);
-      await saveReferrer({ code, name: a.name, kind: "affiliate", phone: a.phone, email: a.email, bankName: null, accountNumber: null, accountName: null, sharePercent: null, active: true, notes: "From website application" }, true);
+      await saveReferrer({ code, name: a.name, kind: "affiliate", phone: a.phone, email: a.email, bankName: null, accountNumber: null, accountName: null, sharePercent: null, active: true, notes: "From website application", userId: null }, true);
       await setApplicationStatus(a.id, "approved");
       try {
-        if (a.email) await sendReferrerWelcome(code, undefined, a.id);
+        if (a.email) await sendReferrerWelcome(code, undefined, a.id, { includeLogin: true });
         else toast.warning("Approved, but this application has no email, so no welcome was sent.");
       } catch (e) { toast.warning(`Affiliate created, but the email didn't send: ${msg(e)}`); }
       toast.success(`Approved — ${a.name} added as an affiliate (${code})`);
@@ -408,7 +483,7 @@ function ApplicationsTab({ isAdmin, onChange }: { isAdmin: boolean; onChange: ()
   // instead of double-sending, even after a remount or from another device.
   const resend = async (a: ReferrerApplication) => {
     try {
-      if (a.status === "approved") await sendReferrerWelcome(suggestCode(a.name, a.phone), undefined, a.id);
+      if (a.status === "approved") await sendReferrerWelcome(suggestCode(a.name, a.phone), undefined, a.id, { includeLogin: true });
       else await sendApplicationDecline(a.id);
       toast.success(`Email sent to ${a.email}`); load();
     } catch (e) { toast.error(`Email didn't send: ${msg(e)}`); load(); }
@@ -430,7 +505,7 @@ function ApplicationsTab({ isAdmin, onChange }: { isAdmin: boolean; onChange: ()
           title={decision.kind === "approve" ? `Approve ${decision.a.name}?` : `Reject ${decision.a.name}?`}
           description={
             decision.kind === "approve"
-              ? `This creates the affiliate ${suggestCode(decision.a.name, decision.a.phone)} and emails ${decision.a.email ?? "them (no email on file, so nothing is sent)"} their code and share link.`
+              ? `This creates the affiliate ${suggestCode(decision.a.name, decision.a.phone)} and emails ${decision.a.email ?? "them (no email on file, so nothing is sent)"} their code, share link and a link to set their dashboard password.`
               : `This marks the application as rejected and emails ${decision.a.email ?? "them (no email on file, so nothing is sent)"} a polite decline.`
           }
           confirmLabel={decision.kind === "approve" ? "Approve and email" : "Reject and email"}
