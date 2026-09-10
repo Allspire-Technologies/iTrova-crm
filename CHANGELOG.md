@@ -3,6 +3,17 @@
 Notable changes to the iTrova CRM (Admin OS). The format follows
 [Keep a Changelog](https://keepachangelog.com/); entries are grouped by ship date, newest first.
 
+## 2026-09-10: Referral tables restricted to staff
+
+### Fixed
+
+- **Affiliate bank details, payouts and applications are no longer readable by customers.** The
+  SELECT policies on `cs_referrer`, `cs_referral_payout` and `cs_referrer_application` were named for
+  staff but their condition was an unconditional true, so any signed-in user of the shared Supabase
+  project could read them. They now require a platform staff role. No behaviour changes in the CRM,
+  which reads these tables as staff, and the website's affiliate application form is unaffected
+  because it inserts under a separate anonymous policy.
+
 ## 2026-09-08: Resend activation email from Customer detail
 
 ### Added
