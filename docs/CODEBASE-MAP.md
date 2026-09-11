@@ -69,9 +69,17 @@ Every cross-tenant read goes through a SECURITY DEFINER RPC, roughly:
 Mappers coerce with `num()`/`str()` because Postgres returns bigint/numeric as strings. The
 `profiles` table is read directly, allowed by an admin-read RLS policy.
 
-Older production project note: default privileges are not set, so **every table a function or RPC
-touches needs an explicit `grant ... to service_role`** in the migration. Forgetting it surfaces
-as "permission denied for table X" at runtime, not at deploy.
+Older production project note: default privileges are not set, so **a table an Edge Function reads
+or writes directly as service_role needs an explicit `grant ... to service_role`** in the
+migration. Forgetting it surfaces as "permission denied for table X" at runtime, not at deploy
+(that is how `cs_referrer` and `referral_config` were caught, in
+`20260910095000_referral_service_role_grants.sql`).
+
+Grant only what the runtime role actually touches. A table reached **only** inside a
+`SECURITY DEFINER` function needs no grant, because the function runs with its owner's privileges:
+`cs_referral_payout` is the example, granted to service_role nowhere and read only through those
+functions. Staging cannot reproduce any of this, since it was created after default privileges
+were restored.
 
 ### Referrals and affiliates
 

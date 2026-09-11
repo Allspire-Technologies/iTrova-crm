@@ -30,8 +30,10 @@ There is no Supabase CLI on this machine and no DB credentials. Write the migrat
 Functions are pasted whole the same way, so production can drift from the repo: if a function
 misbehaves in a way the code does not explain, suspect drift and re-paste it.
 
-This is an older Supabase project without default privileges, so every table a function or RPC
-touches needs an explicit `grant ... to service_role` in the migration.
+This is an older Supabase project without default privileges, so a table an Edge Function reads or
+writes **directly** as service_role needs an explicit `grant ... to service_role` in the migration.
+A table reached only inside a `SECURITY DEFINER` function does not: that runs with its owner's
+privileges. Grant what the runtime role actually touches and no more.
 
 Shells may start in `iTrova`, not here. Use `git -C` or `cd` for CRM work.
 
