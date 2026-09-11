@@ -11,7 +11,7 @@
 // through the admin's browser. variant "access" sends the short "dashboard is ready" note instead of
 // the full welcome, for an affiliate registered before logins existed.
 //
-// Secrets:  RESEND_API_KEY=re_...  EMAIL_FROM_ADDRESS=no-reply@mail.allspire.tech
+// Secrets:  RESEND_API_KEY=re_...  EMAIL_FROM_ADDRESS=no-reply@mail.itrova.co
 //           EMAIL_FROM_NAME="iTrova"  EMAIL_REPLY_TO=<monitored inbox — REQUIRED in spirit here:
 //           the template invites replies, and the from address is a no-reply>
 // Deploy:   supabase functions deploy send-referrer-welcome
