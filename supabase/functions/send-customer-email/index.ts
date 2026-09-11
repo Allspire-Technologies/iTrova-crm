@@ -5,7 +5,7 @@
 // API, and log the result to cs_customer_message. The Resend key + from-identity live only
 // here (Edge Function secrets), never the browser.
 //
-// Secrets:  RESEND_API_KEY=re_...  EMAIL_FROM_ADDRESS=no-reply@mail.allspire.tech
+// Secrets:  RESEND_API_KEY=re_...  EMAIL_FROM_ADDRESS=no-reply@mail.itrova.co
 //           EMAIL_FROM_NAME="iTrova"  EMAIL_REPLY_TO=<monitored inbox, optional but recommended —
 //           the from address is a no-reply, so without this, customer replies bounce>
 // Deploy:   supabase functions deploy send-customer-email
