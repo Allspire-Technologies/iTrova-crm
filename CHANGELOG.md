@@ -3,6 +3,25 @@
 Notable changes to the iTrova CRM (Admin OS). The format follows
 [Keep a Changelog](https://keepachangelog.com/); entries are grouped by ship date, newest first.
 
+## 2026-09-11: Affiliate dashboard data (Phase 2, CRM side)
+
+### Added
+
+- **The functions behind the affiliate dashboard.** `my_affiliate_summary`, `my_affiliate_referrals`
+  and `my_affiliate_payouts` give a signed-in affiliate their own earned, paid and outstanding
+  figures, each referred business with its owner email and a Signed up / Paying / Lapsed status, and
+  their payout history. They read the same `cs_referral_revenue` view and reward function the
+  Referrers tab uses, so an affiliate can never see a figure that differs from the CRM's.
+- **Affiliates can set their own bank details** with `my_affiliate_update_bank`, editable until the
+  first payout and locked after it. Every save writes a masked row to `cs_referrer_bank_change`.
+- **Unlock bank details** on the Referrers row menu (affiliates with a payout): opens a 72-hour window
+  in which the affiliate can edit their details from the dashboard. The window closes on its own.
+
+### Changed
+
+- The three email functions pick up an entity-decoding fix in the shared shell's plain-text part
+  (arrows, quotes and symbols in the text version). Re-paste all three.
+
 ## 2026-09-10: Affiliate dashboard logins (Phase 1)
 
 ### Added

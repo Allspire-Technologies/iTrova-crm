@@ -16,7 +16,7 @@ import { toast } from "sonner";
 import {
   getReferralConfig, updateReferralConfig, listReferrers, saveReferrer, setReferrerActive, sendReferrerWelcome,
   listApplications, setApplicationStatus, listReferredBusinesses, listReferrerSummary, recordPayout,
-  sendApplicationDecline, referrerHistory, deleteReferrer, listAffiliateAccess, accessState,
+  sendApplicationDecline, referrerHistory, deleteReferrer, listAffiliateAccess, accessState, unlockAffiliateBank,
   type Referrer, type ReferrerApplication, type ReferredBusiness, type ReferrerSummary, type AffiliateAccess, type AccessState,
 } from "@/lib/referrals";
 import { rewardFor, suggestCode, type ReferralConfig, type ReferrerKind } from "@/lib/referralMath";
@@ -204,6 +204,15 @@ function ReferrersTab({ isAdmin, config, seesMoney }: { isAdmin: boolean; config
     } catch (e) { toast.error(msg(e)); } finally { setSendingLogin(null); }
   };
 
+  // Bank details lock after the first payout; this opens a 72-hour window for the affiliate to
+  // edit them from their dashboard. Self-expiring, so nothing has to be re-locked.
+  const unlockBank = async (r: ReferrerSummary) => {
+    try {
+      const until = await unlockAffiliateBank(r.code);
+      toast.success(`${r.name} can edit their bank details until ${formatDate(until)}`);
+    } catch (e) { toast.error(msg(e)); }
+  };
+
   // Only affiliate/staff (in cs_referrer) are editable here; businesses opt in from their portal.
   const editRegistry = async (code: string) => {
     const all = await listReferrers().catch(() => [] as Referrer[]);
@@ -252,6 +261,12 @@ function ReferrersTab({ isAdmin, config, seesMoney }: { isAdmin: boolean; config
                           onClick: () => sendLogin(r),
                           disabled: sendingLogin === r.code || !r.email,
                           hint: !r.email ? "Add an email to this affiliate first" : undefined,
+                        }] : []),
+                        // Only meaningful once a payout exists: before that their details are not locked.
+                        ...(r.kind === "affiliate" && r.paid > 0 ? [{
+                          label: "Unlock bank details for 72h",
+                          onClick: () => unlockBank(r),
+                          hint: "Their bank details locked at the first payout; this lets them edit from their dashboard for 72 hours",
                         }] : []),
                       ]} />
                     )}

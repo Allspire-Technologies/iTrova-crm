@@ -122,6 +122,7 @@ function toPlainText(html: string): string {
   const entities: Record<string, string> = {
     nbsp: " ", amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", "#39": "'",
     middot: "·", bull: "-", hellip: "...", mdash: "-", ndash: "-", rsquo: "'", lsquo: "'",
+    rarr: "->", larr: "<-", copy: "(c)", trade: "(TM)", reg: "(R)", ldquo: '"', rdquo: '"',
   };
   return html
     .replace(/<head[\s\S]*?<\/head>/gi, "")

@@ -472,6 +472,7 @@ export async function stubReferrals(page: Page, opts: { referrers?: unknown[]; a
   await page.route("**/rest/v1/rpc/cs_referrals**", (r) => json(r, opts.referred ?? []));
   await page.route("**/rest/v1/rpc/cs_referrers_summary**", (r) => json(r, opts.summary ?? []));
   await page.route("**/rest/v1/rpc/cs_affiliate_access**", (r) => json(r, opts.access ?? []));
+  await page.route("**/rest/v1/rpc/cs_unlock_affiliate_bank**", (r) => json(r, "2026-09-14T10:00:00Z"));
   await page.route("**/rest/v1/rpc/cs_record_payout**", (r) => json(r, 2)); // months added
   await page.route("**/functions/v1/send-referrer-welcome**", (r) => json(r, { ok: true, to_email: "ada@x.example" }));
 }
