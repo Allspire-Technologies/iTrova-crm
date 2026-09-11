@@ -113,7 +113,12 @@ function ReferredTab({ config, seesMoney }: { config: ReferralConfig; seesMoney:
                       <div className="text-xs text-muted-foreground">{r.matched ? `${r.referrerName}${r.referrerKind ? ` · ${KIND_LABEL[r.referrerKind]}` : ""}` : "— unregistered code"}</div>
                     </TableCell>
                     <TableCell className="whitespace-nowrap text-muted-foreground">{formatDate(r.signedUpAt)}</TableCell>
-                    <TableCell>{r.converted ? <Badge>Paying</Badge> : <Badge variant="secondary">Signed up</Badge>}</TableCell>
+                    <TableCell>
+                      <span className="inline-flex flex-wrap items-center gap-1">
+                        {r.converted ? <Badge>Paying</Badge> : <Badge variant="secondary">Signed up</Badge>}
+                        {r.hidden && <Badge variant="outline" title="The affiliate sees this referral anonymised: no name or email, earnings unchanged">Hidden</Badge>}
+                      </span>
+                    </TableCell>
                     {seesMoney && (
                       <TableCell className="text-right tabular-nums">
                         {r.converted ? formatMoney(r.totalPaid12m) : "—"}
@@ -571,6 +576,9 @@ function SettingsTab({ isAdmin, config, onSaved }: { isAdmin: boolean; config: R
     { label: "Affiliate share of first-year revenue (cash payout)", key: "affiliate_share_percent", suffix: "%" },
     { label: "Business referrer share of first-year revenue (subscription credit)", key: "business_share_percent", suffix: "%" },
     { label: "Referee first-payment discount", key: "referee_discount_percent", suffix: "%" },
+    { label: "Reward window (months of paid life that earn the referrer)", key: "reward_window_months", suffix: " months" },
+    { label: "Payouts sent within (days after month end)", key: "payout_within_days", suffix: " days" },
+    { label: "Clawback period (reward reversed if the referral stops paying within)", key: "clawback_months", suffix: " months" },
   ];
 
   return (
@@ -600,6 +608,11 @@ function SettingsTab({ isAdmin, config, onSaved }: { isAdmin: boolean; config: R
             <label key={r.key} className="block text-sm text-muted-foreground">{r.label}{r.suffix ? ` (${r.suffix})` : ""}
               <Input type="number" value={c[r.key] as number} onChange={(e) => setC({ ...c, [r.key]: Number(e.target.value) })} /></label>
           ))}
+          {c.reward_window_months !== config.reward_window_months && (
+            <p role="alert" className="rounded-md border border-amber-300/60 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+              Changing the reward window recalculates every referrer's earnings, including figures affiliates already see on their dashboard.
+            </p>
+          )}
           <div className="grid grid-cols-3 gap-2">
             {(["pro", "business", "enterprise"] as const).map((k) => (
               <label key={k} className="block text-xs capitalize text-muted-foreground">{k} staff bonus

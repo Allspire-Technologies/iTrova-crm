@@ -55,6 +55,8 @@ export type ReferredBusiness = {
   /** 'recorded' = summed from real payments; 'estimated' = derived from the subscription's
    *  standing price, because no payment has been logged for this business yet. */
   valueSource: "recorded" | "estimated";
+  /** The business asked not to be identified to its referrer; the affiliate sees an anonymised row. */
+  hidden: boolean;
 };
 
 export type ReferrerSummary = {
@@ -67,7 +69,7 @@ export type ReferrerSummary = {
 export async function getReferralConfig(): Promise<ReferralConfig> {
   const { data, error } = await sb.from("referral_config").select("*").maybeSingle();
   if (error) throw error;
-  return (data ?? { affiliate_share_percent: 25, business_share_percent: 25, referee_discount_percent: 20, staff_bonus: {} }) as ReferralConfig;
+  return (data ?? { affiliate_share_percent: 25, business_share_percent: 25, referee_discount_percent: 20, staff_bonus: {}, reward_window_months: 12, payout_within_days: 15, clawback_months: 2 }) as ReferralConfig;
 }
 
 /** All referrers (affiliates/staff + businesses that generated a code) with earned/paid/accrued. */
@@ -250,7 +252,16 @@ export async function listReferredBusinesses(search?: string): Promise<ReferredB
     totalPaid12m: Number(r.total_paid_12m) || 0,
     converted: Boolean(r.converted), matched: Boolean(r.matched),
     valueSource: r.value_source === "recorded" ? "recorded" : "estimated",
+    hidden: r.hidden === true,
   }));
+}
+
+/** Admin, or support assigned to the business. When hidden, the affiliate who referred this
+ *  business sees an anonymised row (status and earnings unchanged). */
+export async function setHideFromReferrer(businessId: string, hidden: boolean): Promise<boolean> {
+  const { data, error } = await sb.rpc("cs_set_hide_from_referrer", { p_business_id: businessId, p_hidden: hidden });
+  if (error) throw error;
+  return data === true;
 }
 
 function mapReferrer(r: Record<string, unknown>): Referrer {

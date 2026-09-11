@@ -199,4 +199,31 @@ test.describe("Referrals module", () => {
     await expect(page.getByLabel(/^Email/)).toBeDisabled();
     await expect(page.getByText("(sign-in address, locked)")).toBeVisible();
   });
+
+  test("Program settings shows the policy figures and warns when the reward window changes", async ({ page }) => {
+    await signIn(page, { staff: true });
+    await stubReferrals(page);
+    await page.goto("/referrals");
+    await page.getByRole("tab", { name: "Program settings" }).click();
+    await expect(page.getByText("12 months")).toBeVisible();
+    await expect(page.getByText("15 days")).toBeVisible();
+    await expect(page.getByText("2 months", { exact: true })).toBeVisible();
+
+    await page.getByRole("button", { name: "Edit" }).click();
+    await expect(page.getByRole("alert")).toHaveCount(0);
+    await page.getByLabel(/Reward window/).fill("6");
+    await expect(page.getByRole("alert")).toContainText("recalculates every referrer's earnings");
+    const patch = page.waitForRequest((r) => r.url().includes("/rest/v1/referral_config") && r.method() === "PATCH");
+    await page.getByRole("button", { name: "Save settings" }).click();
+    expect((await patch).postData() ?? "").toContain('"reward_window_months":6');
+  });
+
+  test("a referral the business asked to hide carries a Hidden badge on the Referred tab", async ({ page }) => {
+    await signIn(page, { staff: true });
+    await stubReferrals(page, { referred: [{ ...REFERRED[0], hidden: true }, REFERRED[1]] });
+    await page.goto("/referrals");
+    const row = page.getByRole("row", { name: /Kano Grains/ });
+    await expect(row.getByText("Hidden", { exact: true })).toBeVisible();
+    await expect(page.getByRole("row", { name: /Bright Stores/ }).getByText("Hidden", { exact: true })).toHaveCount(0);
+  });
 });

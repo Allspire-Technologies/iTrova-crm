@@ -3,6 +3,24 @@
 Notable changes to the iTrova CRM (Admin OS). The format follows
 [Keep a Changelog](https://keepachangelog.com/); entries are grouped by ship date, newest first.
 
+## 2026-09-11: Legal documents in the CMS, hide-from-referrer, policy figures from the database
+
+### Added
+
+- **Legal documents are edited in the CRM.** A Legal tab on both the Website console (Terms,
+  Privacy, DPA, Affiliate Terms for itrova.co) and the Allspire console (Terms, Privacy, DPA for
+  allspire.tech). Each row is one version with an effective date; the sites show the latest
+  published version that is in effect, so a future-dated row is a scheduled change. Migration
+  `20260911130000_legal_cms_and_affiliate_hide.sql` seeds the current text of every page.
+- **Hide from referrer** on Customer detail (admin, or the assigned support person). The affiliate
+  who referred the business then sees an anonymised row: no name, no owner email, earnings
+  unchanged. The Referred tab marks such rows with a Hidden badge. This is the mechanism the
+  privacy policy promised.
+- **Reward window, payout timing and clawback period** are now Program settings (12 months,
+  15 days, 2 months by default) rather than fixed text. The reward window drives the earnings
+  maths in `cs_referral_revenue`; editing it shows a warning that every referrer's figures will
+  change. Requires the iTrova migration `20260911130000_referral_policy_and_hide_flag.sql` first.
+
 ## 2026-09-11: Affiliate dashboard data (Phase 2, CRM side)
 
 ### Added

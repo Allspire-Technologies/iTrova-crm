@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { ArrowLeft, Building2, Clock, MailCheck, Trash2, Users } from "lucide-react";
+import { ArrowLeft, Building2, Clock, Eye, EyeOff, MailCheck, Trash2, Users } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/PageHeader";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
@@ -21,6 +21,7 @@ import { UsageSection } from "@/components/customer/UsageSection";
 import { WorkflowSection } from "@/components/customer/WorkflowSection";
 import { ChangePlanPanel } from "@/components/customer/ChangePlanPanel";
 import { getCustomer, type CustomerDetail as Detail } from "@/lib/customers";
+import { setHideFromReferrer } from "@/lib/referrals";
 import { getCurrentHealth, listHealthHistory } from "@/lib/health";
 import { pipeline } from "@/lib/cs";
 import type { CsPipeline, HealthBand, PipelineStage } from "@/lib/cs";
@@ -65,12 +66,14 @@ export default function CustomerDetail() {
   const canDelete = role === "admin"; // deleting a business is Management/Admin-only
   const canManagePlans = roleCanManagePlans(role); // dual-control plan change is Management/Admin-only
   const canResendActivation = roleCanMessageCustomers(role); // same gate as emailing a customer
+  const canHideFromReferrer = roleCanMessageCustomers(role); // admin, or support (the RPC also checks assignment)
   const [data, setData] = useState<Detail | null | undefined>(undefined);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [confirmingResend, setConfirmingResend] = useState(false);
   const [resending, setResending] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
+  const [togglingHide, setTogglingHide] = useState(false);
   const resendKey = useRef<string | null>(null);
   const [health, setHealth] = useState<Health>(null);
   const [stage, setStage] = useState<CsPipeline | null>(null);
@@ -126,6 +129,20 @@ export default function CustomerDetail() {
       toast.error((e as { message?: string })?.message ?? "Couldn't send the activation email.");
     } finally {
       setResending(false);
+    }
+  }
+
+  async function toggleHideFromReferrer() {
+    if (!id || !data) return;
+    setTogglingHide(true);
+    try {
+      const hidden = await setHideFromReferrer(id, !data.hideFromReferrer);
+      setData({ ...data, hideFromReferrer: hidden });
+      toast.success(hidden ? "This business is now anonymised on the referrer's dashboard." : "The referrer can see this business again.");
+    } catch (e) {
+      toast.error((e as { message?: string })?.message ?? "Couldn't update the referrer visibility.");
+    } finally {
+      setTogglingHide(false);
     }
   }
 
@@ -260,7 +277,24 @@ export default function CustomerDetail() {
                 </span>
               </Field>
               <Field label="Industry">{data.industry ?? "—"}</Field>
-              <Field label="Referred by">{data.referredByCode ?? "—"}</Field>
+              <Field label="Referred by">
+                <span className="inline-flex flex-wrap items-center gap-2">
+                  {data.referredByCode ?? "—"}
+                  {data.referredByCode && data.hideFromReferrer && <Badge variant="outline">Hidden from referrer</Badge>}
+                  {data.referredByCode && canHideFromReferrer && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 px-2 text-xs"
+                      disabled={togglingHide}
+                      onClick={toggleHideFromReferrer}
+                      title={data.hideFromReferrer ? "Let the referrer see this business's name and email again" : "Anonymise this business on the referrer's dashboard (earnings unchanged)"}
+                    >
+                      {data.hideFromReferrer ? <><Eye className="size-3.5" /> Show to referrer</> : <><EyeOff className="size-3.5" /> Hide from referrer</>}
+                    </Button>
+                  )}
+                </span>
+              </Field>
               <Field label="Referral code">{data.referralCode ?? "—"}</Field>
               <Field label="Plan"><PlanBadge planKey={data.planKey} /></Field>
               <Field label="Renewal date">{formatDate(sub?.currentPeriodEnd)}</Field>

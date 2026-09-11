@@ -138,4 +138,38 @@ test.describe("Customer Detail (§7.4)", () => {
     await expect(page.getByText("Not activated")).toBeVisible();
     await expect(page.getByRole("button", { name: "Resend activation email" })).toHaveCount(0);
   });
+
+  test("admin hides a referred business from its referrer (RPC call, badge flips)", async ({ page }) => {
+    await signIn(page, { staff: true });
+    await stubCustomers(page);
+    await page.route("**/rest/v1/rpc/admin_business_profile**", (r) =>
+      r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([{ ...PROFILE_EXTRA, referred_by_code: "ADAOBI0305", hide_from_referrer: false }]) }));
+    await page.route("**/rest/v1/rpc/cs_set_hide_from_referrer**", (r) =>
+      r.fulfill({ status: 200, contentType: "application/json", body: "true" }));
+    await page.goto(`/customers/${CUSTOMER.id}`);
+
+    await expect(page.getByText("ADAOBI0305")).toBeVisible();
+    await expect(page.getByText("Hidden from referrer")).toHaveCount(0);
+    const call = page.waitForRequest((r) => r.url().includes("/rest/v1/rpc/cs_set_hide_from_referrer") && r.method() === "POST");
+    await page.getByRole("button", { name: "Hide from referrer" }).click();
+    expect((await call).postData() ?? "").toContain('"p_hidden":true');
+    await expect(page.getByText("Hidden from referrer")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Show to referrer" })).toBeVisible();
+  });
+
+  test("no referrer, no toggle; a CSO never gets it", async ({ page }) => {
+    await signIn(page, { staff: true });
+    await stubCustomers(page);
+    await page.goto(`/customers/${CUSTOMER.id}`);
+    await expect(page.getByRole("heading", { name: CUSTOMER.name })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Hide from referrer" })).toHaveCount(0);
+
+    await signIn(page, { staff: true, role: "cso" });
+    await stubCustomers(page);
+    await page.route("**/rest/v1/rpc/admin_business_profile**", (r) =>
+      r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([{ ...PROFILE_EXTRA, referred_by_code: "ADAOBI0305" }]) }));
+    await page.goto(`/customers/${CUSTOMER.id}`);
+    await expect(page.getByText("ADAOBI0305")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Hide from referrer" })).toHaveCount(0);
+  });
 });
