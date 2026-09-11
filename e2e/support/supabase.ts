@@ -457,8 +457,8 @@ export async function stubTasks(page: Page) {
 export async function stubReferrals(page: Page, opts: { referrers?: unknown[]; applications?: unknown[]; referred?: unknown[]; summary?: unknown[]; access?: unknown[] } = {}) {
   await page.route("**/rest/v1/referral_config**", (r) =>
     json(r, r.request().headers()["accept"]?.includes("vnd.pgrst.object")
-      ? { id: true, affiliate_share_percent: 25, business_share_percent: 25, referee_discount_percent: 20, staff_bonus: { pro: 2000, business: 5000, enterprise: 10000 } }
-      : [{ id: true, affiliate_share_percent: 25, business_share_percent: 25, referee_discount_percent: 20, staff_bonus: { pro: 2000, business: 5000, enterprise: 10000 } }]));
+      ? { id: true, affiliate_share_percent: 25, business_share_percent: 25, referee_discount_percent: 20, staff_bonus: { pro: 2000, business: 5000, enterprise: 10000 }, reward_window_months: 12, payout_within_days: 15, clawback_months: 2 }
+      : [{ id: true, affiliate_share_percent: 25, business_share_percent: 25, referee_discount_percent: 20, staff_bonus: { pro: 2000, business: 5000, enterprise: 10000 }, reward_window_months: 12, payout_within_days: 15, clawback_months: 2 }]));
   await page.route("**/rest/v1/cs_referrer**", (r) => {
     const m = r.request().method();
     if (m === "POST") { let sent = {}; try { sent = JSON.parse(r.request().postData() || "{}"); } catch { /* {} */ } return json(r, [sent]); }

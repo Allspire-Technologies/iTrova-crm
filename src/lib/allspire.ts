@@ -9,6 +9,8 @@ const sb = supabase as any;
 export type Row = Record<string, unknown> & { id?: string };
 
 export const AS_TABLES = [
+  "as_legal_doc",
+  "cms_legal_doc",
   "as_logo",
   "as_stat",
   "as_case_study",

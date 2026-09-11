@@ -8,6 +8,12 @@ export type ReferralConfig = {
   business_share_percent: number;  // referring businesses' subscription-credit share
   referee_discount_percent: number;
   staff_bonus: Record<string, number>; // by plan key, e.g. { pro: 2000, business: 5000, enterprise: 10000 }
+  /** Months of a referred business's paid life that earn the referrer. Drives the earnings maths. */
+  reward_window_months: number;
+  /** Payouts go out within this many days of month end (terms page copy). */
+  payout_within_days: number;
+  /** A referral that stops paying within this many months has its reward reversed (terms page copy). */
+  clawback_months: number;
 };
 
 export type ReferralRow = {

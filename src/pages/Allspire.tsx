@@ -11,6 +11,8 @@ import { cn } from "@/lib/utils";
 
 const INDUSTRIES = ["real-estate", "finance", "retail", "logistics", "education"];
 
+const LEGAL_SLUGS = ["terms", "privacy", "dpa"];
+
 const COLLECTIONS: CollectionConfig[] = [
   {
     table: "as_logo",
@@ -123,6 +125,25 @@ const COLLECTIONS: CollectionConfig[] = [
     ],
   },
 ];
+
+// Versioned like the iTrova legal docs: the site shows the latest published row whose effective
+// date has passed. Appended last so the proof collections keep their order.
+COLLECTIONS.push({
+  table: "as_legal_doc",
+  title: "Legal",
+  blurb: "Terms, Privacy and DPA on allspire.tech. Add a new row for a new version and set its effective date; the site shows the latest published version that is in effect.",
+  columns: ["slug", "title", "effective_at", "published"],
+  orderBy: ["slug", "effective_at"],
+  wide: true,
+  rowLabel: (r) => `${String(r.title)} (${String(r.effective_at)})`,
+  fields: [
+    { key: "slug", label: "Document", type: "select", required: true, options: LEGAL_SLUGS },
+    { key: "title", label: "Title", type: "text", required: true, hint: "e.g. Terms of Service" },
+    { key: "effective_at", label: "Effective date", type: "text", required: true, hint: "YYYY-MM-DD" },
+    { key: "body_md", label: "Body (markdown)", type: "markdown", required: true },
+    { key: "published", label: "Published", type: "boolean" },
+  ],
+});
 
 export default function Allspire() {
   const { role } = useAuth();
