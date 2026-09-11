@@ -21,6 +21,15 @@ Notable changes to the iTrova CRM (Admin OS). The format follows
 
 - The three email functions pick up an entity-decoding fix in the shared shell's plain-text part
   (arrows, quotes and symbols in the text version). Re-paste all three.
+- **Unlock toast shows the exact time** the window closes, not just the day.
+
+### Fixed
+
+- Migration `20260911110000_affiliate_review_fixes.sql` (review follow-ups): the identity helper
+  behind the dashboard functions is internal only, so an affiliate cannot call it to read staff
+  bonus configuration; and saving bank details and recording a payout now lock the affiliate's row
+  first, so a payout recorded mid-save can no longer let the destination change after the lock
+  should have applied.
 
 ## 2026-09-10: Affiliate dashboard logins (Phase 1)
 

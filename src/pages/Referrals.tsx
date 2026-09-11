@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useAuth } from "@/contexts/AuthContext";
 import { roleSeesRevenue } from "@/lib/roles";
-import { formatMoney, formatDate } from "@/lib/format";
+import { formatMoney, formatDate, formatDateTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import {
@@ -209,7 +209,7 @@ function ReferrersTab({ isAdmin, config, seesMoney }: { isAdmin: boolean; config
   const unlockBank = async (r: ReferrerSummary) => {
     try {
       const until = await unlockAffiliateBank(r.code);
-      toast.success(`${r.name} can edit their bank details until ${formatDate(until)}`);
+      toast.success(`${r.name} can edit their bank details until ${formatDateTime(until)}`);
     } catch (e) { toast.error(msg(e)); }
   };
 
