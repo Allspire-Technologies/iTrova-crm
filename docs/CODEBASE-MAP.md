@@ -116,7 +116,13 @@ one per version with an `effective_at` date, and the site serves the latest one 
 DM Sans self-hosted at itrova.co/fonts, logo at itrova.co/icon-512.png, VML button for Outlook,
 plain-text part via `toPlainText`). Functions embed it rather than importing across the wire, so
 after editing it run `node scripts/sync-email-shell.mjs`, then **re-paste every affected
-function** into the dashboard. `ITROVA_APP_URL` is a secret and must be https.
+function** into the dashboard.
+
+Two secrets decide what an email says about iTrova, and neither is a literal in the code:
+`EMAIL_FROM_ADDRESS` (the sender, on the `mail.itrova.co` sending domain through Resend) and
+`ITROVA_APP_URL` (where its links land, defaulting to `https://app.itrova.co`, validated as https
+and required to be an allowed redirect URL in Auth). Both move without a code change, so read the
+secret before assuming an address or origin from the repo.
 
 ### Migrations and functions
 
