@@ -1,7 +1,9 @@
 # Codebase map: iTrova CRM (Admin OS)
 
-Read this before starting work. It covers where things live and the flows you keep needing.
-If it disagrees with the code, the code wins: fix the map in the same change.
+Read this before you start, and again before you commit. It covers where things live and the
+flows you keep needing. If it disagrees with the code, the code wins: fix the map in the same
+change. If your work changes anything described here, update it in the same commit, so the next
+agent inherits what you learned instead of rediscovering it.
 
 The internal staff console: customer success, renewals, referrals, marketing, and the content
 consoles for both marketing websites. React + Vite + TypeScript, Tailwind and shadcn/ui, deployed
