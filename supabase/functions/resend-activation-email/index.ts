@@ -149,7 +149,7 @@ function toPlainText(html: string): string {
 }
 // >>> END EMAIL SHELL
 
-const DEFAULT_APP_URL = "https://itrova.allspire.tech";
+const DEFAULT_APP_URL = "https://app.itrova.co";
 const TEMPLATE_KEY = "activation_resend";
 const SUBJECT = "Activate your iTrova account";
 const COOLDOWN_SECONDS = 60;
