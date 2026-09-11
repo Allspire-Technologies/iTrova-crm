@@ -165,6 +165,26 @@ test.describe("Referrals module", () => {
     await expect(page.getByText("Active", { exact: true })).toBeVisible();
   });
 
+  test("an affiliate with a payout gets an Unlock bank details action that calls the RPC", async ({ page }) => {
+    await signIn(page, { staff: true });
+    await stubReferrals(page, {
+      summary: [{ ...AFFILIATE_SUMMARY, paid: 20000, accrued: 2500 }, { ...AFFILIATE_SUMMARY, code: "NEW0001", name: "Never Paid", paid: 0 }],
+      access: [],
+    });
+    await page.goto("/referrals");
+    await page.getByRole("tab", { name: "Referrers" }).click();
+    // Paid affiliate: the action is offered and hits the unlock RPC with the code.
+    await page.getByRole("button", { name: "More actions" }).first().click();
+    const unlock = page.waitForRequest((r) => r.url().includes("/rest/v1/rpc/cs_unlock_affiliate_bank") && r.method() === "POST");
+    await page.getByRole("menuitem", { name: "Unlock bank details for 72h" }).click();
+    const req = await unlock;
+    expect(req.postData() ?? "").toContain('"p_code":"ADAEZE7741"');
+    await expect(page.getByText(/can edit their bank details until/)).toBeVisible();
+    // Never paid: nothing is locked, so the action is not offered.
+    await page.getByRole("button", { name: "More actions" }).nth(1).click();
+    await expect(page.getByRole("menuitem", { name: "Unlock bank details for 72h" })).toHaveCount(0);
+  });
+
   test("the email field is locked once a login exists", async ({ page }) => {
     await signIn(page, { staff: true });
     await stubReferrals(page, {

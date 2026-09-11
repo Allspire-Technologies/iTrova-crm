@@ -141,6 +141,14 @@ export async function sendReferrerWelcome(code: string, idempotencyKey?: string,
   });
 }
 
+/** Admin only. Opens a window (default 72h) in which the affiliate can edit their bank details
+ *  again after the first payout has locked them. Returns when the window closes. */
+export async function unlockAffiliateBank(code: string, hours = 72): Promise<string> {
+  const { data, error } = await sb.rpc("cs_unlock_affiliate_bank", { p_code: code, p_hours: hours });
+  if (error) throw error;
+  return String(data);
+}
+
 /** Dashboard access per affiliate code, for the Referrers tab badge. Staff-gated RPC. */
 export type AffiliateAccess = { userId: string | null; lastSignInAt: string | null };
 export type AccessState = "none" | "invited" | "active";

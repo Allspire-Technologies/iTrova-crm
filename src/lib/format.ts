@@ -18,6 +18,14 @@ export function formatDate(iso: string | null | undefined) {
   return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
 }
 
+/** Date with the time of day, for deadlines that expire within a day (an unlock window). */
+export function formatDateTime(iso: string | null | undefined) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleString(undefined, { year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" });
+}
+
 export function formatRelative(iso: string | null | undefined) {
   if (!iso) return "Never";
   const d = new Date(iso);
