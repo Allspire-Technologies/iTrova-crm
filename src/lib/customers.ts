@@ -168,6 +168,7 @@ export type CustomerDetail = {
   ownerEmail: string | null;
   ownerEmailConfirmedAt: string | null;
   profileUnavailable: boolean; // the profile RPC failed; email/activation fields above are unknown, not empty
+  hideFromReferrer: boolean;   // the business asked not to be identified to the affiliate who referred it
   referredByCode: string | null;
   referralCode: string | null;
   timezone: string | null;
@@ -192,7 +193,7 @@ export async function getCustomer(id: string): Promise<CustomerDetail | null> {
     getBusinessProfileExtra(id).catch(() => null),
   ]);
   if (error) throw error;
-  const extra = profileExtra ?? { industry: null, ownerEmail: null, referredByCode: null, referralCode: null, ownerEmailConfirmedAt: null };
+  const extra = profileExtra ?? { industry: null, ownerEmail: null, referredByCode: null, referralCode: null, ownerEmailConfirmedAt: null, hideFromReferrer: false };
 
   return {
     id: agg.businessId,
@@ -203,6 +204,7 @@ export async function getCustomer(id: string): Promise<CustomerDetail | null> {
     ownerEmail: extra.ownerEmail,
     ownerEmailConfirmedAt: extra.ownerEmailConfirmedAt,
     profileUnavailable: profileExtra === null,
+    hideFromReferrer: extra.hideFromReferrer,
     referredByCode: extra.referredByCode,
     referralCode: extra.referralCode,
     timezone: agg.timezone,

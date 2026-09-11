@@ -51,11 +51,32 @@ const TABS = [
   { key: "testimonials", label: "Testimonials" },
   { key: "stats", label: "Stats" },
   { key: "copy", label: "Page copy" },
+  { key: "legal", label: "Legal" },
 ] as const;
 type TabKey = (typeof TABS)[number]["key"];
 
 // Home-page figures. Real numbers only: the site hides the strip until one is published and shows
 // at most four, in sort order.
+// Legal pages on itrova.co. Each row is one version of one document; the site shows the latest
+// published version whose effective date has passed, so a future-dated row is a scheduled change.
+const LEGAL_SLUGS = ["terms", "privacy", "dpa", "affiliate-terms"];
+const LEGAL_CONFIG: CollectionConfig = {
+  table: "cms_legal_doc",
+  title: "Legal",
+  blurb: "Terms, Privacy, DPA and Affiliate Terms on itrova.co. Add a new row for a new version and set its effective date; the site shows the latest published version that is in effect.",
+  columns: ["slug", "title", "effective_at", "published"],
+  orderBy: ["slug", "effective_at"],
+  wide: true,
+  rowLabel: (r) => `${String(r.title)} (${String(r.effective_at)})`,
+  fields: [
+    { key: "slug", label: "Document", type: "select", required: true, options: LEGAL_SLUGS },
+    { key: "title", label: "Title", type: "text", required: true, hint: "e.g. Terms of Service" },
+    { key: "effective_at", label: "Effective date", type: "text", required: true, hint: "YYYY-MM-DD" },
+    { key: "body_md", label: "Body (markdown)", type: "markdown", required: true, hint: "programme figures: {{affiliate_share_percent}}, {{referee_discount_percent}}, {{reward_window_months}}, {{payout_within_days}}, {{clawback_months}}" },
+    { key: "published", label: "Published", type: "boolean" },
+  ],
+};
+
 const STATS_CONFIG: CollectionConfig = {
   table: "cms_stat",
   title: "Stats",
@@ -215,6 +236,7 @@ export default function Website() {
         {tab === "testimonials" && <TestimonialsTab isAdmin={isAdmin} />}
         {tab === "stats" && <CollectionTab config={STATS_CONFIG} isAdmin={isAdmin} />}
         {tab === "copy" && <CopyTab isAdmin={isAdmin} />}
+        {tab === "legal" && <CollectionTab config={LEGAL_CONFIG} isAdmin={isAdmin} />}
       </div>
     </div>
   );
