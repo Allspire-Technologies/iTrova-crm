@@ -6,7 +6,8 @@ both marketing sites. Shares one Supabase project with the app.
 ## The codebase map
 
 **[docs/CODEBASE-MAP.md](docs/CODEBASE-MAP.md)** is shared working memory for everyone on this
-repo: the directory layout and the key flows. Read it twice, write it back once.
+repo: the directory layout and the key flows. Read it twice; write it back when your work
+changes what it describes.
 
 **Read it before you start.** Before searching the tree, before planning, before your first edit,
 so you are not rediscovering structure that is already written down. If it disagrees with the
