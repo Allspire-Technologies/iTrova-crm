@@ -20,6 +20,12 @@ Notable changes to the iTrova CRM (Admin OS). The format follows
   15 days, 2 months by default) rather than fixed text. The reward window drives the earnings
   maths in `cs_referral_revenue`; editing it shows a warning that every referrer's figures will
   change. Requires the iTrova migration `20260911130000_referral_policy_and_hide_flag.sql` first.
+  
+## 2026-09-11: Affiliate emails link to app.itrova.co
+
+### Changed
+
+- The activation and welcome emails default to app.itrova.co when ITROVA_APP_URL is not set.
 
 ## 2026-09-11: Affiliate dashboard data (Phase 2, CRM side)
 
