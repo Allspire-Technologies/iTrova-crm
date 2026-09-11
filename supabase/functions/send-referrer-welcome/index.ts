@@ -155,7 +155,7 @@ function toPlainText(html: string): string {
 // >>> END EMAIL SHELL
 const money = (n: number) => "₦" + Number(n || 0).toLocaleString();
 
-const DEFAULT_APP_URL = "https://itrova.allspire.tech";
+const DEFAULT_APP_URL = "https://app.itrova.co";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });

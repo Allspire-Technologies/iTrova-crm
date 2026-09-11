@@ -3,6 +3,12 @@
 Notable changes to the iTrova CRM (Admin OS). The format follows
 [Keep a Changelog](https://keepachangelog.com/); entries are grouped by ship date, newest first.
 
+## 2026-09-11: Affiliate emails link to app.itrova.co
+
+### Changed
+
+- The activation and welcome emails default to app.itrova.co when ITROVA_APP_URL is not set.
+
 ## 2026-09-11: Affiliate dashboard data (Phase 2, CRM side)
 
 ### Added
